@@ -55,10 +55,10 @@ class TabularAgent(Strategy):
 
     # --- helpers -------------------------------------------------------------
     def _legal_actions(self, state: GameState) -> list[Action]:
-        legal = [a for a in state.legal_actions() if a in _STAGE2_ACTIONS]
+        legal : list[Action] = [a for a in state.legal_actions() if a in _STAGE2_ACTIONS]
         return legal or ["stand"]  # hit/stand are always legal; guard the empty case anyway
 
     def _greedy_over(self, key: StateKey, actions: list[Action]) -> Action:
         best_val = max(self.q.get((key, a), 0.0) for a in actions)
-        best = [a for a in actions if self.q.get((key, a), 0.0) == best_val]
+        best: list[Action] = [a for a in actions if self.q.get((key, a), 0.0) == best_val]
         return random.choice(best)  # random tie-break, so no bias toward the first action
