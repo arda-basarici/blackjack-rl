@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "blackjack-rl"
+version = "0.0.0"
+description = "Phase 3 — an RL agent that learns blackjack, audited against the proven-optimal basic strategy."
+requires-python = ">=3.13"
+dependencies = [
+    "numpy",
+    # torch is deliberately NOT here yet: Stages 1-4 are tabular (numpy only).
+    # It is added at Stage 5 (the DQN), where we will also confirm the 3.13 wheel.
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "mypy"]
+
+# The Phase 2 engine is consumed via an editable install, not a declared dependency:
+#   pip install -e ../../phase2-data/blackjack-sim
+# (path deps are awkward with plain pip; see README + DESIGN.md D10).
+
+[tool.setuptools.packages.find]
+include = ["blackjack_rl*"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
