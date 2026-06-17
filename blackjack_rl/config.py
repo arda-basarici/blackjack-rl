@@ -5,13 +5,12 @@ hardcoding, and the whole thing is saved with each run for reproducibility (D8).
 deliberately minimal (D9): a knob is added when a stage needs it, not before.
 
 Exploration can be constant (``epsilon``) or a decaying schedule (``epsilon_schedule`` with
-``epsilon_start`` -> ``epsilon_end``); constant remains the default, so older fixed-epsilon
-runs stay reproducible.
+``epsilon_start`` -> ``epsilon_end``). The value-update step is a sample average by default;
+``step_size`` switches it to a constant-alpha (recency-weighted) update, needed when the
+target is non-stationary (decaying epsilon). Defaults keep older runs reproducible.
 
-Deliberately NOT here, and why:
-  * discount factor (gamma) — terminal-only reward, so the return is just the final payout.
-  * state-feature flags — A's state is fixed; the toggle arrives with Problem B's count.
-  * algorithm name / env ruleset — provenance, recorded in the run's metadata, not tuned.
+Deliberately NOT here: discount gamma (terminal-only reward), state-feature flags (arrive
+with Problem B), algorithm/ruleset (provenance, recorded in the run, not tuned).
 """
 from __future__ import annotations
 
@@ -29,10 +28,11 @@ class ExperimentConfig:
     epsilon_schedule : "constant" | "linear" | "exponential" | "harmonic".
     epsilon_start    : start rate for a decaying schedule.
     epsilon_end      : end rate for a decaying schedule (reached at the final episode).
+    step_size        : constant-alpha update if set; None = sample average (1/N).
     seed             : seed for the global RNG (Phase 2 convention: 42).
 
-    We train with exploration but EVALUATE greedily (epsilon = 0), so exploration only shapes
-    what gets sampled, never the reported policy. See CONCEPTS.md #15.
+    We train with exploration but EVALUATE greedily, so exploration only shapes what gets
+    sampled, never the reported policy. See CONCEPTS.md #15.
     """
 
     num_episodes: int
@@ -40,6 +40,7 @@ class ExperimentConfig:
     epsilon_schedule: str = "constant"
     epsilon_start: float = 0.3
     epsilon_end: float = 0.0
+    step_size: float | None = None
     seed: int = 42
 
     def __post_init__(self) -> None:
@@ -54,3 +55,5 @@ class ExperimentConfig:
         ):
             if not 0.0 <= value <= 1.0:
                 raise ValueError(f"{name} must be in [0, 1], got {value}")
+        if self.step_size is not None and not 0.0 < self.step_size <= 1.0:
+            raise ValueError(f"step_size must be in (0, 1], got {self.step_size}")

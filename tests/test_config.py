@@ -13,6 +13,7 @@ def test_defaults() -> None:
     assert cfg.epsilon_schedule == "constant"
     assert cfg.epsilon_start == 0.3
     assert cfg.epsilon_end == 0.0
+    assert cfg.step_size is None
     assert cfg.seed == 42
 
 
@@ -30,6 +31,7 @@ def test_serializes_to_dict() -> None:
         "epsilon_schedule": "constant",
         "epsilon_start": 0.3,
         "epsilon_end": 0.0,
+        "step_size": None,
         "seed": 7,
     }
 
@@ -47,3 +49,10 @@ def test_rejects_bad_epsilon() -> None:
 def test_rejects_unknown_schedule() -> None:
     with pytest.raises(ValueError):
         ExperimentConfig(num_episodes=1000, epsilon_schedule="bogus")
+
+
+def test_rejects_bad_step_size() -> None:
+    with pytest.raises(ValueError):
+        ExperimentConfig(num_episodes=1000, step_size=0.0)
+    with pytest.raises(ValueError):
+        ExperimentConfig(num_episodes=1000, step_size=1.5)

@@ -99,9 +99,10 @@ def run_experiment(
         explore = f"epsilon {config.epsilon}"
     else:
         explore = f"epsilon {config.epsilon_schedule} {config.epsilon_start}->{config.epsilon_end}"
+    update = "sample-avg" if config.step_size is None else f"alpha={config.step_size}"
     log(
         f"[{started:%Y-%m-%d %H:%M:%S}] training {config.num_episodes:,} episodes "
-        f"(seed {config.seed}, {explore}) ..."
+        f"(seed {config.seed}, {explore}, {update}) ..."
     )
     agent = train(config, progress_every=progress_every)
     train_seconds = time.perf_counter() - t0

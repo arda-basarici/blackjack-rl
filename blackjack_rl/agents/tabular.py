@@ -2,9 +2,13 @@
 
 Holds Q(state, action) value estimates and N(state, action) visit counts. `decide` is the
 training behaviour policy (epsilon-greedy); `greedy_action` is the target policy used for
-evaluation; `update` folds a return into the running mean. Credit assignment — which return G
-goes to which (state, action) — is the trainer's job (A1, DESIGN D1); this agent only stores
-and averages, and does not know where G came from.
+evaluation; `update` folds a return into Q. Credit assignment — which return G goes to which
+(state, action) — is the trainer's job (A1, DESIGN D1); this agent only stores and averages,
+and does not know where G came from.
+
+`update` uses a sample average (1/N) by default; pass a constant ``step_size`` (alpha) for a
+recency-weighted estimate, which is what a *non-stationary* target needs (a decaying epsilon
+or an improving policy means old returns are stale). See A8 / CONCEPTS.
 """
 from __future__ import annotations
 
@@ -24,8 +28,9 @@ class TabularAgent(Strategy):
     """A Q-table policy. Q and N are public so the trainer, evaluator, and persistence can
     read/write them directly."""
 
-    def __init__(self, epsilon: float = 0.1) -> None:
+    def __init__(self, epsilon: float = 0.1, step_size: float | None = None) -> None:
         self.epsilon = epsilon
+        self.step_size = step_size  # None -> sample average (1/N); else constant alpha
         self.q: dict[tuple[StateKey, Action], float] = {}
         self.n: dict[tuple[StateKey, Action], int] = {}
 
@@ -47,11 +52,13 @@ class TabularAgent(Strategy):
 
     # --- learning bookkeeping (called by the trainer) ------------------------
     def update(self, key: StateKey, action: Action, g: float) -> None:
-        """Fold return `g` into the running mean Q(key, action): N += 1; Q += (g - Q) / N."""
+        """Fold return `g` into Q(key, action). Step is 1/N (sample average) unless a constant
+        ``step_size`` alpha was set, giving Q += alpha * (g - Q) (recency-weighted)."""
         k = (key, action)
         self.n[k] = self.n.get(k, 0) + 1
         q = self.q.get(k, 0.0)
-        self.q[k] = q + (g - q) / self.n[k]
+        alpha = self.step_size if self.step_size is not None else 1.0 / self.n[k]
+        self.q[k] = q + alpha * (g - q)
 
     # --- helpers -------------------------------------------------------------
     def _legal_actions(self, state: GameState) -> list[Action]:

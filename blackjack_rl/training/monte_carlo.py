@@ -5,8 +5,8 @@ assignment: every (state, action) in a hand receives the hand's terminal reward 
 (terminal-only reward, no discounting — every-visit Monte Carlo). Because the agent's `decide`
 is epsilon-greedy over the *current* Q, policy improvement is implicit. See DESIGN.md D1.
 
-Exploration follows ``config``'s schedule (constant or decaying); a decaying schedule explores
-hard early then anneals toward 0 so the final values stay clean (A8).
+Exploration follows ``config``'s schedule; the value update uses ``config.step_size`` (constant
+alpha, recency-weighted) if set, else a sample average. See A8.
 """
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ def train(config: ExperimentConfig, progress_every: int | None = None) -> Tabula
     set, prints progress (fraction, elapsed, rate, ETA, current epsilon, states discovered).
     """
     random.seed(config.seed)
-    agent = TabularAgent(epsilon=config.epsilon)
+    agent = TabularAgent(epsilon=config.epsilon, step_size=config.step_size)
     env_config = problem_a_config()
     epsilon_at = make_epsilon_schedule(
         config.epsilon_schedule,

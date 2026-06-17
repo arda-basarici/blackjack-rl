@@ -25,6 +25,15 @@ def test_update_is_a_running_mean():
     assert abs(a.q[(key, "hit")] - 0.0) < 1e-12  # mean of {1, 0, -1}
 
 
+def test_constant_step_size_is_recency_weighted():
+    a = TabularAgent(step_size=0.5)
+    key = (16, False, 10)
+    a.update(key, "hit", 1.0)   # 0 + 0.5*(1 - 0)   = 0.5
+    a.update(key, "hit", 1.0)   # 0.5 + 0.5*(1-0.5) = 0.75
+    assert a.n[(key, "hit")] == 2
+    assert abs(a.q[(key, "hit")] - 0.75) < 1e-12   # != sample-average (1.0)
+
+
 def test_greedy_picks_highest_q():
     a = TabularAgent()
     s = _gs(16, False, 10)              # legal: hit, stand
