@@ -15,6 +15,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "mypy"]
+# For the analysis notebooks in analysis/ (policy investigation, heatmaps).
+analysis = ["pandas", "matplotlib", "ipykernel"]
 
 # The Phase 2 engine is consumed via an editable install, not a declared dependency:
 #   pip install -e ../../phase2-data/blackjack-sim

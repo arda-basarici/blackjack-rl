@@ -95,9 +95,13 @@ def run_experiment(
 
     started = datetime.now().astimezone()
     t0 = time.perf_counter()
+    if config.epsilon_schedule == "constant":
+        explore = f"epsilon {config.epsilon}"
+    else:
+        explore = f"epsilon {config.epsilon_schedule} {config.epsilon_start}->{config.epsilon_end}"
     log(
         f"[{started:%Y-%m-%d %H:%M:%S}] training {config.num_episodes:,} episodes "
-        f"(seed {config.seed}, epsilon {config.epsilon}) ..."
+        f"(seed {config.seed}, {explore}) ..."
     )
     agent = train(config, progress_every=progress_every)
     train_seconds = time.perf_counter() - t0

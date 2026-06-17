@@ -1,6 +1,8 @@
 """CLI: train a tabular MC blackjack agent, evaluate it, and save the run.
 
     python -m blackjack_rl --episodes 5000000 --seed 42
+    python -m blackjack_rl --episodes 5000000 --epsilon-schedule linear \
+        --epsilon-start 0.3 --epsilon-end 0.0
 """
 from __future__ import annotations
 
@@ -9,6 +11,7 @@ from pathlib import Path
 
 from blackjack_rl.config import ExperimentConfig
 from blackjack_rl.experiment import run_experiment
+from blackjack_rl.schedules import KINDS
 
 
 def main() -> None:
@@ -16,8 +19,11 @@ def main() -> None:
         description="Train a tabular Monte Carlo blackjack agent and save the run."
     )
     parser.add_argument("--episodes", type=int, default=5_000_000, help="training hands")
-    parser.add_argument("--epsilon", type=float, default=0.1, help="exploration rate")
     parser.add_argument("--seed", type=int, default=42, help="training RNG seed")
+    parser.add_argument("--epsilon", type=float, default=0.1, help="exploration rate (constant schedule)")
+    parser.add_argument("--epsilon-schedule", choices=KINDS, default="constant", help="exploration schedule")
+    parser.add_argument("--epsilon-start", type=float, default=0.3, help="start rate (decaying schedule)")
+    parser.add_argument("--epsilon-end", type=float, default=0.0, help="end rate (decaying schedule)")
     parser.add_argument("--eval-hands", type=int, default=200_000, help="hands for edge eval")
     parser.add_argument("--eval-seed", type=int, default=0, help="eval RNG seed")
     parser.add_argument("--min-visits", type=int, default=1000, help="policy-diff visit threshold")
@@ -28,7 +34,14 @@ def main() -> None:
     parser.add_argument("--runs-dir", type=str, default=None, help="output dir (default: ./runs)")
     args = parser.parse_args()
 
-    config = ExperimentConfig(num_episodes=args.episodes, epsilon=args.epsilon, seed=args.seed)
+    config = ExperimentConfig(
+        num_episodes=args.episodes,
+        epsilon=args.epsilon,
+        epsilon_schedule=args.epsilon_schedule,
+        epsilon_start=args.epsilon_start,
+        epsilon_end=args.epsilon_end,
+        seed=args.seed,
+    )
     result = run_experiment(
         config,
         eval_hands=args.eval_hands,

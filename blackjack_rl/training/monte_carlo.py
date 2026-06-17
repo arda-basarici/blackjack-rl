@@ -3,10 +3,10 @@
 Plays full episodes with the agent's current epsilon-greedy policy, then does credit
 assignment: every (state, action) in a hand receives the hand's terminal reward as its return
 (terminal-only reward, no discounting — every-visit Monte Carlo). Because the agent's `decide`
-is epsilon-greedy over the *current* Q, policy improvement is implicit: as Q updates, the
-policy it induces improves. See DESIGN.md D1 / Stage 2.
+is epsilon-greedy over the *current* Q, policy improvement is implicit. See DESIGN.md D1.
 
-`train` is pure training (seeding + the loop); evaluation and run persistence are separate.
+Exploration follows ``config``'s schedule (constant or decaying); a decaying schedule explores
+hard early then anneals toward 0 so the final values stay clean (A8).
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ import time
 from blackjack_rl.agents.tabular import TabularAgent
 from blackjack_rl.config import ExperimentConfig
 from blackjack_rl.env import Episode, problem_a_config, rollout
+from blackjack_rl.schedules import make_epsilon_schedule
 from blackjack_rl.util import format_duration
 
 
@@ -30,18 +31,25 @@ def _apply_episode(agent: TabularAgent, episode: Episode) -> None:
 def train(config: ExperimentConfig, progress_every: int | None = None) -> TabularAgent:
     """Train a ``TabularAgent`` by Monte Carlo control over ``config.num_episodes`` hands.
 
-    Seeds the global RNG once (covering both the env's shuffles and the agent's epsilon-greedy
-    draws) so the run is reproducible, then returns the trained agent. If ``progress_every`` is
-    set, prints progress to stderr every that many episodes: fraction done, elapsed, rate, ETA,
-    and the number of distinct states discovered so far (a live coverage signal).
+    Seeds the global RNG once so the run is reproducible, sets the exploration rate from the
+    config's schedule each episode, and returns the trained agent. If ``progress_every`` is
+    set, prints progress (fraction, elapsed, rate, ETA, current epsilon, states discovered).
     """
     random.seed(config.seed)
     agent = TabularAgent(epsilon=config.epsilon)
     env_config = problem_a_config()
+    epsilon_at = make_epsilon_schedule(
+        config.epsilon_schedule,
+        constant=config.epsilon,
+        start=config.epsilon_start,
+        end=config.epsilon_end,
+        num_episodes=config.num_episodes,
+    )
     total = config.num_episodes
     start = time.perf_counter()
 
     for i in range(total):
+        agent.epsilon = epsilon_at(i)
         _apply_episode(agent, rollout(agent, env_config))
         if progress_every and (i + 1) % progress_every == 0:
             done = i + 1
@@ -52,7 +60,7 @@ def train(config: ExperimentConfig, progress_every: int | None = None) -> Tabula
             print(
                 f"  {done:,}/{total:,} ({done / total:.0%})  "
                 f"elapsed {format_duration(elapsed)}  {rate:,.0f} hands/s  "
-                f"eta {format_duration(eta)}  states {states}",
+                f"eta {format_duration(eta)}  eps {agent.epsilon:.3f}  states {states}",
                 file=sys.stderr,
             )
     return agent
