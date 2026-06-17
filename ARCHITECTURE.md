@@ -111,7 +111,7 @@ breaks the stiffs. Decaying epsilon is the textbook fix, but only with a recency
 update: a 1/N sample average cannot forget the early high-epsilon returns, so decay *alone*
 behaves like a mid-epsilon fixed run (confirmed empirically). The decision logged here is that
 the machinery exists and why; the best concrete setting (schedule + alpha) is being decided by
-experiment. *Empirical verdict: pending the decay+alpha run.*
+experiment. *Empirical verdict.* Across configs the agent rediscovers ~93-95% of basic strategy at ~1% house edge. decay+alpha (linear 0.3->0, alpha=0.001) is best overall - lowest edge (~0.86% at a 1M-hand eval) and fewest genuine disagreements (12) - but only modestly: it fixes several soft doubles while alpha-noise introduces new close-call flips on stiff hands, so the residual *relocates* rather than disappearing. That residual is largely irreducible within this method + state (coarse state can't separate soft-double contexts, near-tie cells need impractically many samples, constant-alpha adds jitter); closing it needs a richer state (Stage 3) or a different method, not more episodes - confirmed by the learning curve, which shows convergence by ~2-3M episodes. Caveat learned: at 200k eval hands the edge estimates misranked the top configs; only 1M re-evaluation revealed decay+alpha best. Rank on tight estimates, not noisy ones.
 
 ### A9 — Saved runs are self-contained, re-loadable, comparable
 Each run's record carries the full Q-table and visit counts (D8 / D10), so `load_agent`
