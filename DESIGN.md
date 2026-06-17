@@ -144,6 +144,13 @@ has a plausible reason to exist (generalizing across count values, smoother bet-
 The net is a thing we *study*, validated against truth — not a necessity we pretend into
 the problem.
 
+*Revised sequencing & precision (mid-project).* Problem A is completed (with splits) and
+reported as a standalone **tabular** result before the DQN, so each artifact is
+self-contained. And the switch is a *double* one: A uses tabular **Monte Carlo control**
+(full-return, no bootstrapping), whereas a DQN is **deep Q-learning** (TD bootstrapping + a
+network). So A -> DQN changes both the representation (table -> net) and the learning rule
+(MC -> TD); the writeup names both honestly rather than calling A "Q-learning."
+
 **D5 — Online and offline, compared through the lens of *coverage*.**
 We train both ways and compare — but framed honestly. Comparing them on raw house edge is
 a foregone conclusion (online explores, offline can't). The real lesson is **coverage**:
@@ -238,21 +245,33 @@ almost everywhere yet differ on a few high-frequency cells, or vice versa.
 
 ## 8. Staged build plan
 
-Each stage is an independently committable milestone. We reserve the right to stop after
-the core if scope runs long — this is Phase 3, not the flagship, and shouldn't balloon.
+Independently committable milestones. **Revised mid-project:** the offline coverage study was
+dropped, Problem A is reported as a standalone tabular result *before* the DQN, and the DQN
+debuts validated on A and is then deployed on B. We reserve the right to stop after the core —
+this is Phase 3, not the flagship.
 
-1. **Env + scaffolding** — episode-capture wrapper over the engine (D7), config dataclass
-   (D9), run persistence with visit counts (D8). Tests as we go.
-2. **A · tabular · online · no splits** — Monte Carlo control; the clean credit-assignment
-   core. First policy-diff heatmap and house-edge check against 0.45%.
-3. **A · splits added** — complete the table so the heatmap has no holes (D6).
-4. **A · offline** — tabular learning from `hands_random` vs. `hands_basic` logs; the
-   coverage study (D5).
-5. **A · DQN** — PyTorch function approximation validated against the exact table (D4);
-   the Phase 3 literacy payoff.
-6. **B · counting & betting** — the extension where clean ground truth ends (D5/§3).
-7. **Joint analysis + writeup** — A, B, and the Phase 2 fixed strategies side by side;
-   README and final report.
+1. **Env + scaffolding** — episode-capture wrapper (D7), config (D9), persistence with visit
+   counts (D8). [done]
+2. **A · tabular · online · no splits** — Monte Carlo control; policy-diff heatmap + house-edge
+   vs the anchor. [done] Extended well past plan into the exploration investigation: epsilon
+   schedules, constant-alpha (recency weighting), the policy-diff diagnosis, and learning-curve
+   convergence instrumentation (A8, A10).
+3. **A · splits** — complete the action space so the heatmap has no holes (D6). Adds a
+   pair-aware state (config-driven, so no-split runs stay reproducible) and branching
+   credit-assignment; the policy is retrained (the no-split runs remain valid historical
+   results). See A11.
+4. **Report · Problem A** — the durable narrative PDF: rediscovery audit, the exploration/bias
+   finding, the irreducible residual, convergence. Figures re-rendered from saved runs.
+5. **DQN** — PyTorch function approximation. Debuts **validated on Problem A** against the exact
+   table (D4), then carried into B. (Also the MC-control -> deep-Q-learning switch — table->net
+   and Monte-Carlo->TD at once; see D4.)
+6. **B · counting & betting** — the DQN deployed where clean ground truth ends (§3): new session
+   env, count state, bet-sizing, risk-sensitive objective.
+7. **Joint analysis + final writeup** — A, B, and the Phase 2 fixed strategies side by side.
+
+*Dropped — offline coverage study (former stage 4):* its "coverage governs the outcome" lesson
+is already shown twice (pathfinding's regime tag; this project's under-exploration of rare
+cells), it is not deep learning, and it is better revisited in the LLM phase (RLHF-adjacent).
 
 ## 9. Scope & non-goals (deliberate restraint)
 

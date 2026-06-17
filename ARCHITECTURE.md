@@ -130,6 +130,18 @@ earlier than rare-cell fidelity — so experiments can stop at the plateau inste
 Churn uses a deterministic argmax (not the random-tie-break greedy) so ties don't register as
 spurious change; with constant-alpha, churn settles to a small plateau rather than zero.
 
+### A11 — Splits extend the code (config-driven state); models retrain, prior runs stay reproducible
+Splits are added by *extending*, not rebuilding: `encode_state` gains pair-awareness, the agent
+gains the `split` action, and env/trainer handle the branching episode. The state is made
+**config-driven** (no-split vs split mode) so earlier no-split runs remain reproducible from
+their saved config - backward compatible. Because splits change the state and action space, the
+existing trained Q-tables cannot be "taught" incrementally; the policy is **retrained** on the
+new space (the no-split runs stay as valid historical results). The one genuinely new design
+point is the **branching credit assignment**: each split sub-hand's decisions are credited with
+*that* sub-hand's return (the engine stamps this per decision) and the split decision with the
+net - not the whole hand's total dumped on every step (D6's "tree, not chain"). Evaluation,
+persistence, and the Strategy interface are unchanged.
+
 ## Module map (current)
 
 - `blackjack_rl/state.py` — `encode_state`, `StateKey`
