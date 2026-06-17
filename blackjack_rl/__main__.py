@@ -25,6 +25,7 @@ def main() -> None:
     parser.add_argument("--epsilon-start", type=float, default=0.3, help="start rate (decaying schedule)")
     parser.add_argument("--epsilon-end", type=float, default=0.0, help="end rate (decaying schedule)")
     parser.add_argument("--step-size", type=float, default=None, help="constant alpha update (default: 1/N sample average)")
+    parser.add_argument("--with-splits", action="store_true", help="enable the split action + pair-aware state")
     parser.add_argument("--eval-hands", type=int, default=200_000, help="hands for edge eval")
     parser.add_argument("--eval-seed", type=int, default=0, help="eval RNG seed")
     parser.add_argument("--min-visits", type=int, default=1000, help="policy-diff visit threshold")
@@ -42,6 +43,7 @@ def main() -> None:
         epsilon_start=args.epsilon_start,
         epsilon_end=args.epsilon_end,
         step_size=args.step_size,
+        with_splits=args.with_splits,
         seed=args.seed,
     )
     result = run_experiment(

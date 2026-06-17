@@ -7,10 +7,11 @@ deliberately minimal (D9): a knob is added when a stage needs it, not before.
 Exploration can be constant (``epsilon``) or a decaying schedule (``epsilon_schedule`` with
 ``epsilon_start`` -> ``epsilon_end``). The value-update step is a sample average by default;
 ``step_size`` switches it to a constant-alpha (recency-weighted) update, needed when the
-target is non-stationary (decaying epsilon). Defaults keep older runs reproducible.
+target is non-stationary (decaying epsilon). ``with_splits`` turns on the split action and the
+pair-aware state encoding (A11); it defaults off so prior no-split runs stay reproducible.
 
-Deliberately NOT here: discount gamma (terminal-only reward), state-feature flags (arrive
-with Problem B), algorithm/ruleset (provenance, recorded in the run, not tuned).
+Deliberately NOT here: discount gamma (terminal-only reward); count features (arrive with
+Problem B); algorithm/ruleset (provenance, recorded in the run, not tuned).
 """
 from __future__ import annotations
 
@@ -29,6 +30,7 @@ class ExperimentConfig:
     epsilon_start    : start rate for a decaying schedule.
     epsilon_end      : end rate for a decaying schedule (reached at the final episode).
     step_size        : constant-alpha update if set; None = sample average (1/N).
+    with_splits      : enable the split action + pair-aware state (A11); off = no-split A.
     seed             : seed for the global RNG (Phase 2 convention: 42).
 
     We train with exploration but EVALUATE greedily, so exploration only shapes what gets
@@ -41,6 +43,7 @@ class ExperimentConfig:
     epsilon_start: float = 0.3
     epsilon_end: float = 0.0
     step_size: float | None = None
+    with_splits: bool = False
     seed: int = 42
 
     def __post_init__(self) -> None:

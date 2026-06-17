@@ -1,10 +1,6 @@
 """Tests for blackjack_rl.evaluation.policy_diff."""
 from blackjack_rl.agents.tabular import TabularAgent
-from blackjack_rl.evaluation.policy_diff import (
-    _canonical_state,
-    classify,
-    diff_policy,
-)
+from blackjack_rl.evaluation.policy_diff import _canonical_state, classify, diff_policy
 from strategies.basic_strategy import BasicStrategy
 
 _MIN, _TOL = 1000, 0.02
@@ -28,7 +24,6 @@ def test_classify_genuine_disagreement() -> None:
 
 def test_diff_policy_applies_classification_consistently() -> None:
     agent = TabularAgent()
-    # a few cells with controlled tables
     agent.q[((20, False, 10), "stand")] = 1.0
     agent.n[((20, False, 10), "stand")] = 5000
     agent.q[((16, False, 10), "stand")] = 0.5
@@ -40,7 +35,6 @@ def test_diff_policy_applies_classification_consistently() -> None:
         expected = classify(agree, cell.visits, abs(cell.agent_q - cell.basic_q), _MIN, _TOL)
         assert cell.category == expected
     assert 0.0 <= report.agreement_unweighted <= 1.0
-    assert 0.0 <= report.agreement_weighted <= 1.0
     assert sum(report.category_counts.values()) == len(report.cells)
 
 
@@ -48,7 +42,7 @@ def test_agreeing_cell_is_agree() -> None:
     agent = TabularAgent()
     key = (20, False, 10)
     basic_action = BasicStrategy().decide(_canonical_state(*key))
-    agent.q[(key, basic_action)] = 1.0   # make greedy pick basic's action
+    agent.q[(key, basic_action)] = 1.0
     agent.n[(key, basic_action)] = 5000
     report = diff_policy(agent)
     cell = next(c for c in report.cells if (c.player_value, c.is_soft, c.dealer_upcard) == key)
@@ -61,9 +55,24 @@ def test_undervisited_disagreement_is_flagged() -> None:
     key = (16, False, 10)
     basic_action = BasicStrategy().decide(_canonical_state(*key))
     other = "stand" if basic_action != "stand" else "hit"
-    agent.q[(key, other)] = 1.0          # greedy picks a non-basic action
-    agent.n[(key, other)] = 10           # below min_visits
+    agent.q[(key, other)] = 1.0
+    agent.n[(key, other)] = 10
     report = diff_policy(agent, min_visits=_MIN)
     cell = next(c for c in report.cells if (c.player_value, c.is_soft, c.dealer_upcard) == key)
     assert cell.agent_action == other != cell.basic_action
     assert cell.category == "under_visited"
+
+
+def test_diff_handles_split_cells() -> None:
+    # a split agent has 4-tuple keys; the pairs column must be compared with split available
+    agent = TabularAgent(with_splits=True)
+    key = (16, False, 10, True)          # pair of 8s
+    agent.q[(key, "split")] = 0.5
+    agent.n[(key, "split")] = 5000
+    report = diff_policy(agent, min_visits=_MIN)
+    cell = next(c for c in report.cells if c.player_value == 16 and c.can_split)
+    assert cell.can_split is True
+    assert cell.agent_action == "split"
+    expected = classify(cell.agent_action == cell.basic_action, cell.visits,
+                        abs(cell.agent_q - cell.basic_q), _MIN, _TOL)
+    assert cell.category == expected

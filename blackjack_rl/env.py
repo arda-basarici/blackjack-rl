@@ -1,21 +1,21 @@
 """Episode-capture wrapper around the Phase 2 engine — the boundary between the blackjack
-world and our RL code. See DESIGN.md D7.
+world and our RL code. See DESIGN.md D7 / A1 / A11.
 
-The engine is "engine-calls-strategy" and `HandSimulator.play_hand()` is atomic. To capture
-an episode we wrap the acting policy in a recorder that logs (state_key, action) for every
-decision as the engine queries it, play one hand, and read the terminal reward off the
-`HandResult`. Nothing downstream sees the engine's record format; it stops here.
+The policy plays straight through the engine; we read the episode back from the HandResult's
+per-decision records — each decision's state key, action, and the return the engine attributes
+to it. For a single (no-split) hand every decision carries the hand's total; for a split, each
+sub-hand's decisions carry that sub-hand's payout and the split decision carries the net (b).
+So credit assignment follows the tree correctly, with no extra bookkeeping here.
 
-Reproducibility: the engine shuffles with Python's global `random`, so a run is made
-reproducible by seeding it ONCE (`random.seed(...)`) before rolling out — never per hand,
-which would make every hand identical. See CONCEPTS.md #14.
+Reproducibility: the engine shuffles with Python's global `random`; seed it ONCE before rolling
+out (never per hand). See CONCEPTS.md #14.
 """
 from dataclasses import dataclass
 from typing import Iterator
 
 from simulator.card import Deck
 from simulator.config import SimulatorConfig, vegas_strip
-from simulator.game_state import GameState, Action
+from simulator.game_state import Action
 from simulator.hand_simulator import HandSimulator
 from strategies.base import Strategy
 
@@ -26,63 +26,55 @@ from blackjack_rl.state import StateKey, encode_state
 class Episode:
     """One played hand as RL sees it.
 
-    steps  : the (state_key, action) pairs the policy went through, in order.
-    reward : terminal payout in bet units (bet = 1) — +1 win, +1.5 blackjack, -1 loss,
-             0 push; doubles/splits scale accordingly.
+    steps  : (state_key, action, return) per decision, in play order. `return` is the MC return
+             credited to that decision — the payout of the (sub-)hand it belongs to (the split
+             decision gets the net of its sub-hands). For a single-chain hand every step's
+             return equals `reward`.
+    reward : the hand's total payout in bet units (bet = 1) — used for the house-edge metric.
 
-    `steps` may be empty (a dealt blackjack resolves with no decision). For a hand with
-    splits, `steps` is not a single chain — handled in Stage 3 (D6).
+    `steps` may be empty (a dealt blackjack resolves with no decision).
     """
-    steps: list[tuple[StateKey, Action]]
+
+    steps: list[tuple[StateKey, Action, float]]
     reward: float
 
 
-class _Recorder(Strategy):
-    """Wraps a policy: logs (state_key, action) for each decision, delegates the choice."""
-
-    def __init__(self, policy: Strategy) -> None:
-        self._policy = policy
-        self.steps: list[tuple[StateKey, Action]] = []
-
-    def decide(self, state: GameState) -> Action:
-        action = self._policy.decide(state)
-        self.steps.append((encode_state(state), action))
-        return action
-
-    def name(self) -> str:
-        return self._policy.name()
-
-
 def problem_a_config() -> SimulatorConfig:
-    """Rules for Problem A: the 6-deck S17 3:2 anchor config, counting OFF.
-
-    Starts from `vegas_strip()` (the exact ruleset BasicStrategy's 0.45% edge is measured on)
-    and disables counting. Each rollout deals a FRESH shoe, so hands are independent and no
-    count can build — which is what makes A a clean, counting-free MDP.
-    """
+    """Rules for Problem A: the 6-deck S17 3:2 anchor config, counting OFF. A fresh shoe per
+    rollout makes hands independent and counting-free — a clean MDP."""
     cfg = vegas_strip()
     cfg.card_counting_allowed = False
     return cfg
 
 
-def rollout(policy: Strategy, config: SimulatorConfig | None = None) -> Episode:
-    """Play one hand with `policy` and return the captured Episode.
+def rollout(
+    policy: Strategy, config: SimulatorConfig | None = None, with_splits: bool = False
+) -> Episode:
+    """Play one hand with `policy`; return the captured Episode.
 
-    A fresh, shuffled shoe per call makes hands independent (Problem A). Seed the global RNG
-    once before calling repeatedly for a reproducible run.
+    The policy plays through the engine directly; we read each decision's (state, action, its
+    own return) from the HandResult's per-decision records. `with_splits` must match how the
+    policy encodes states (the trainer passes ``config.with_splits``); it only affects key
+    encoding, not whether the engine splits. Fresh shoe per call (Problem A); seed the global
+    RNG once before repeated calls.
     """
     cfg = config if config is not None else problem_a_config()
-    recorder = _Recorder(policy)
     deck = Deck(num_decks=cfg.num_decks)  # fresh shoe, shuffled in __init__
-    sim = HandSimulator(cfg, deck, recorder)
-    result = sim.play_hand(session_id="ep", bankroll=0.0, bet_size=1.0, hands_played=0)
-    return Episode(steps=recorder.steps, reward=result.payout)
+    result = HandSimulator(cfg, deck, policy).play_hand(
+        session_id="ep", bankroll=0.0, bet_size=1.0, hands_played=0
+    )
+    steps: list[tuple[StateKey, Action, float]] = [
+        (encode_state(r, with_splits), r.action, r.payout)
+        for r in result.decision_records
+        if r.action != "none"
+    ]
+    return Episode(steps=steps, reward=result.payout)
 
 
 def rollout_many(
-    policy: Strategy, n: int, config: SimulatorConfig | None = None
+    policy: Strategy, n: int, config: SimulatorConfig | None = None, with_splits: bool = False
 ) -> Iterator[Episode]:
     """Yield `n` Episodes. Seed the global RNG once before iterating for reproducibility."""
     cfg = config if config is not None else problem_a_config()
     for _ in range(n):
-        yield rollout(policy, cfg)
+        yield rollout(policy, cfg, with_splits)

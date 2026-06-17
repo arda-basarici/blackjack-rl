@@ -14,6 +14,7 @@ def test_defaults() -> None:
     assert cfg.epsilon_start == 0.3
     assert cfg.epsilon_end == 0.0
     assert cfg.step_size is None
+    assert cfg.with_splits is False
     assert cfg.seed == 42
 
 
@@ -32,8 +33,13 @@ def test_serializes_to_dict() -> None:
         "epsilon_start": 0.3,
         "epsilon_end": 0.0,
         "step_size": None,
+        "with_splits": False,
         "seed": 7,
     }
+
+
+def test_with_splits_can_be_enabled() -> None:
+    assert ExperimentConfig(num_episodes=10, with_splits=True).with_splits is True
 
 
 def test_rejects_bad_num_episodes() -> None:

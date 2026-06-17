@@ -1,15 +1,13 @@
 """Fidelity-axis evaluation — compare the learned policy to basic strategy, cell by cell.
 
-This is the signature deliverable: not just *whether* the agent matches the proven-optimal
-basic strategy, but *where* it doesn't and *why*. Each disagreement is split into
+Not just *whether* the agent matches the proven-optimal basic strategy, but *where* it doesn't
+and *why*. Each disagreement is split into under_visited (too little data), near_equal_ev
+(well-visited but ~tied — an honest non-difference), or genuine_disagreement (well-visited, a
+real value gap). See DESIGN.md section 6.
 
-  * under_visited        — too little data; the agent hasn't seen this cell enough (fixable),
-  * near_equal_ev        — well-visited, but the two actions are ~tied in value (an honest
-                           non-difference, not a failure),
-  * genuine_disagreement — well-visited and a real value gap; the agent confidently differs.
-
-Distinguishing "failed to learn" from "nothing to learn" is the spine of the project. See
-DESIGN.md section 6.
+Split-aware: a visited cell may be a 3-tuple (no-split) or a 4-tuple (split mode, with
+``can_split``). The canonical comparison state carries that ``can_split`` bit, so the pairs
+column is compared with split as a real option.
 """
 from __future__ import annotations
 
@@ -41,6 +39,7 @@ class CellDiff:
     player_value: int
     is_soft: bool
     dealer_upcard: int
+    can_split: bool
     visits: int
     agent_action: Action
     basic_action: Action
@@ -73,9 +72,12 @@ def classify(
     return "genuine_disagreement"
 
 
-def _canonical_state(player_value: int, is_soft: bool, dealer_upcard: int) -> GameState:
-    """A 2-card decision state for cell-by-cell comparison: doubling allowed, no split or
-    surrender (Stage 2 scope), so the agent and basic strategy choose over the same actions."""
+def _canonical_state(
+    player_value: int, is_soft: bool, dealer_upcard: int, can_split: bool = False
+) -> GameState:
+    """A 2-card decision state for cell-by-cell comparison: doubling allowed, surrender off, and
+    split allowed iff this cell is a splittable pair — so the agent and basic strategy choose
+    over the same actions for that cell (including the pairs column)."""
     return GameState(
         player_value=player_value,
         player_is_soft=is_soft,
@@ -84,9 +86,18 @@ def _canonical_state(player_value: int, is_soft: bool, dealer_upcard: int) -> Ga
         can_hit=True,
         can_stand=True,
         can_double=True,
-        can_split=False,
+        can_split=can_split,
         can_surrender=False,
     )
+
+
+def _unpack(state_key: StateKey) -> tuple[int, bool, int, bool]:
+    """(player_value, is_soft, dealer_upcard, can_split) — can_split is False for 3-tuple keys."""
+    if len(state_key) == 4:
+        player_value, is_soft, dealer_upcard, can_split = state_key
+        return player_value, is_soft, dealer_upcard, can_split
+    player_value, is_soft, dealer_upcard = state_key
+    return player_value, is_soft, dealer_upcard, False
 
 
 def diff_policy(
@@ -104,8 +115,8 @@ def diff_policy(
 
     cells: list[CellDiff] = []
     for state_key in sorted(visits_by_state):
-        player_value, is_soft, dealer_upcard = state_key
-        state = _canonical_state(player_value, is_soft, dealer_upcard)
+        player_value, is_soft, dealer_upcard, can_split = _unpack(state_key)
+        state = _canonical_state(player_value, is_soft, dealer_upcard, can_split)
         agent_action = agent.greedy_action(state)
         basic_action = basic_strategy.decide(state)
         agent_q = agent.q.get((state_key, agent_action), 0.0)
@@ -116,8 +127,9 @@ def diff_policy(
         )
         cells.append(
             CellDiff(
-                player_value, is_soft, dealer_upcard, visits,
-                agent_action, basic_action, agent_q, basic_q, category,
+                player_value=player_value, is_soft=is_soft, dealer_upcard=dealer_upcard,
+                can_split=can_split, visits=visits, agent_action=agent_action,
+                basic_action=basic_action, agent_q=agent_q, basic_q=basic_q, category=category,
             )
         )
 

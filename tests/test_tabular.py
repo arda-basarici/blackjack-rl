@@ -53,10 +53,10 @@ def test_epsilon_zero_decide_equals_greedy():
     assert a.decide(s) == "double" == a.greedy_action(s)
 
 
-def test_only_legal_stage2_actions_and_never_splits():
+def test_no_splits_by_default_even_when_legal():
     random.seed(0)
-    a = TabularAgent(epsilon=1.0)       # always explore
-    s = _gs(16, False, 10, can_double=False, can_split=True)  # a pair: split is legal in engine
+    a = TabularAgent(epsilon=1.0)       # default: with_splits=False
+    s = _gs(16, False, 10, can_double=False, can_split=True)  # a pair: split legal in engine
     chosen = {a.decide(s) for _ in range(200)}
     assert chosen <= _STAGE2
     assert "split" not in chosen and "surrender" not in chosen
@@ -70,3 +70,31 @@ def test_double_only_offered_when_legal():
     chosen = {a.decide(s) for _ in range(200)}
     assert "double" not in chosen
     assert chosen <= {"hit", "stand"}
+
+
+# --- splits enabled -------------------------------------------------------------------------
+def test_split_offered_when_enabled_and_legal():
+    random.seed(0)
+    a = TabularAgent(epsilon=1.0, with_splits=True)
+    s = _gs(16, False, 10, can_split=True)    # pair of 8s
+    chosen = {a.decide(s) for _ in range(300)}
+    assert "split" in chosen
+    assert chosen <= {"hit", "stand", "double", "split"}
+
+
+def test_split_agent_uses_4tuple_key_and_can_pick_split():
+    a = TabularAgent(epsilon=0.0, with_splits=True)
+    s = _gs(16, False, 10, can_split=True)
+    key = encode_state(s, with_splits=True)   # (16, False, 10, True)
+    assert len(key) == 4
+    a.q[(key, "split")] = 1.0
+    a.q[(key, "stand")] = 0.2
+    assert a.greedy_action(s) == "split"
+
+
+def test_split_not_offered_when_not_a_pair():
+    random.seed(2)
+    a = TabularAgent(epsilon=1.0, with_splits=True)
+    s = _gs(16, False, 10, can_split=False)   # not a pair -> split not legal
+    chosen = {a.decide(s) for _ in range(200)}
+    assert "split" not in chosen

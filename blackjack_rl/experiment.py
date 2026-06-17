@@ -44,12 +44,12 @@ def _qtable_records(agent: TabularAgent) -> list[dict[str, object]]:
     """Flatten the agent's Q-table and visit counts into JSON-friendly records."""
     records: list[dict[str, object]] = []
     for (state_key, action), q in agent.q.items():
-        player_value, is_soft, dealer_upcard = state_key
         records.append(
             {
-                "player_value": player_value,
-                "is_soft": is_soft,
-                "dealer_upcard": dealer_upcard,
+                "player_value": state_key[0],
+                "is_soft": state_key[1],
+                "dealer_upcard": state_key[2],
+                "can_split": state_key[3] if len(state_key) == 4 else None,
                 "action": action,
                 "q": q,
                 "n": agent.n.get((state_key, action), 0),
@@ -64,9 +64,12 @@ def load_agent(record: dict[str, Any], epsilon: float = 0.0) -> TabularAgent:
     The policy is fully defined by its Q-table, so a saved run can be re-evaluated instantly
     (more hands, other seeds, other rule configs). Inverse of ``_qtable_records``.
     """
-    agent = TabularAgent(epsilon=epsilon)
+    with_splits = bool(record.get("config", {}).get("with_splits", False))
+    agent = TabularAgent(epsilon=epsilon, with_splits=with_splits)
     for r in record["qtable"]:
-        state_key = (int(r["player_value"]), bool(r["is_soft"]), int(r["dealer_upcard"]))
+        base = (int(r["player_value"]), bool(r["is_soft"]), int(r["dealer_upcard"]))
+        can_split = r.get("can_split")
+        state_key = (*base, bool(can_split)) if can_split is not None else base
         action = r["action"]
         agent.q[(state_key, action)] = float(r["q"])
         agent.n[(state_key, action)] = int(r["n"])

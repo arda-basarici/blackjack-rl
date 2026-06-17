@@ -3,12 +3,11 @@
 Holds Q(state, action) value estimates and N(state, action) visit counts. `decide` is the
 training behaviour policy (epsilon-greedy); `greedy_action` is the target policy used for
 evaluation; `update` folds a return into Q. Credit assignment — which return G goes to which
-(state, action) — is the trainer's job (A1, DESIGN D1); this agent only stores and averages,
-and does not know where G came from.
+(state, action) — is the trainer's job (A1, DESIGN D1); this agent only stores and averages.
 
 `update` uses a sample average (1/N) by default; pass a constant ``step_size`` (alpha) for a
-recency-weighted estimate, which is what a *non-stationary* target needs (a decaying epsilon
-or an improving policy means old returns are stale). See A8 / CONCEPTS.
+recency-weighted estimate, needed when the target is non-stationary (A8). ``with_splits`` adds
+the `split` action and the pair-aware state encoding (A11); off by default = no-split A.
 """
 from __future__ import annotations
 
@@ -19,36 +18,42 @@ from strategies.base import Strategy
 
 from blackjack_rl.state import StateKey, encode_state
 
-# Actions the agent chooses among in Stage 2: no `split` (D6, learned in Stage 3) and no
-# `surrender` (off in problem_a_config). `double` is included but only when the state allows it.
+# Actions the agent chooses among. Split is excluded by default (and surrender is off in
+# problem_a_config); `with_splits` enables it. `double`/`split` are only ever offered when the
+# state actually allows them.
 _STAGE2_ACTIONS: tuple[Action, ...] = ("hit", "stand", "double")
+_SPLIT_ACTIONS: tuple[Action, ...] = ("hit", "stand", "double", "split")
 
 
 class TabularAgent(Strategy):
     """A Q-table policy. Q and N are public so the trainer, evaluator, and persistence can
     read/write them directly."""
 
-    def __init__(self, epsilon: float = 0.1, step_size: float | None = None) -> None:
+    def __init__(
+        self, epsilon: float = 0.1, step_size: float | None = None, with_splits: bool = False
+    ) -> None:
         self.epsilon = epsilon
         self.step_size = step_size  # None -> sample average (1/N); else constant alpha
+        self.with_splits = with_splits
+        self._actions: tuple[Action, ...] = _SPLIT_ACTIONS if with_splits else _STAGE2_ACTIONS
         self.q: dict[tuple[StateKey, Action], float] = {}
         self.n: dict[tuple[StateKey, Action], int] = {}
 
     # --- Strategy contract (training behaviour policy) -----------------------
     def decide(self, state: GameState) -> Action:
-        """Epsilon-greedy over the legal Stage-2 actions."""
+        """Epsilon-greedy over the legal actions (incl. split iff with_splits)."""
         actions = self._legal_actions(state)
         if random.random() < self.epsilon:
             return random.choice(actions)
-        return self._greedy_over(encode_state(state), actions)
+        return self._greedy_over(encode_state(state, self.with_splits), actions)
 
     def name(self) -> str:
         return "TabularAgent"
 
     # --- target policy (used for evaluation) ---------------------------------
     def greedy_action(self, state: GameState) -> Action:
-        """Pure argmax over the legal Stage-2 actions — no exploration."""
-        return self._greedy_over(encode_state(state), self._legal_actions(state))
+        """Pure argmax over the legal actions — no exploration."""
+        return self._greedy_over(encode_state(state, self.with_splits), self._legal_actions(state))
 
     # --- learning bookkeeping (called by the trainer) ------------------------
     def update(self, key: StateKey, action: Action, g: float) -> None:
@@ -62,7 +67,7 @@ class TabularAgent(Strategy):
 
     # --- helpers -------------------------------------------------------------
     def _legal_actions(self, state: GameState) -> list[Action]:
-        legal : list[Action] = [a for a in state.legal_actions() if a in _STAGE2_ACTIONS]
+        legal : list[Action] = [a for a in state.legal_actions() if a in self._actions]
         return legal or ["stand"]  # hit/stand are always legal; guard the empty case anyway
 
     def _greedy_over(self, key: StateKey, actions: list[Action]) -> Action:
