@@ -4,6 +4,9 @@ Ties the Stage 2 pieces together: train a TabularAgent, measure its greedy house
 basic strategy's (the anchor), diff the learned policy cell by cell, assemble the record, and
 save it (never overwriting). This is where the run record is finally assembled — the piece
 deferred from persistence (D8). See DESIGN.md Stage 2.
+
+``load_agent`` is the inverse: rebuild a trained policy from a saved record's qtable, so a run
+can be re-evaluated (more hands, other seeds) without retraining.
 """
 from __future__ import annotations
 
@@ -12,6 +15,7 @@ import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from strategies.basic_strategy import BasicStrategy
 
@@ -52,6 +56,21 @@ def _qtable_records(agent: TabularAgent) -> list[dict[str, object]]:
             }
         )
     return records
+
+
+def load_agent(record: dict[str, Any], epsilon: float = 0.0) -> TabularAgent:
+    """Rebuild a TabularAgent from a saved run's ``qtable`` — no retraining.
+
+    The policy is fully defined by its Q-table, so a saved run can be re-evaluated instantly
+    (more hands, other seeds, other rule configs). Inverse of ``_qtable_records``.
+    """
+    agent = TabularAgent(epsilon=epsilon)
+    for r in record["qtable"]:
+        state_key = (int(r["player_value"]), bool(r["is_soft"]), int(r["dealer_upcard"]))
+        action = r["action"]
+        agent.q[(state_key, action)] = float(r["q"])
+        agent.n[(state_key, action)] = int(r["n"])
+    return agent
 
 
 def run_experiment(

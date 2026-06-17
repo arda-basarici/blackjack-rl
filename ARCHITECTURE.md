@@ -89,6 +89,16 @@ at runtime but show as unresolved. Fixed with explicit source paths: `pyrightcon
 project and `python.analysis.extraPaths` in the repo-root `.vscode/settings.json` (used when the
 whole repo is the workspace, since Pyright reads only the root config).
 
+### A7 — No checkpoint/resume yet; deterministic rerun is the recovery (deferred)
+Training runs in memory and persists only at the end, so a crash mid-run loses the run. This
+is an accepted trade at this stage: the Q/N tables are tiny (no OOM risk), the run is
+deterministic (same seed -> identical agent, so recovery is simply rerunning), and Stage-2
+runs are minutes, not hours. Deferred, not dropped: periodic checkpoint + resume earns its
+place once a session runs for hours (much larger episode counts, or the Stage-5 DQN). The
+essential detail when we add it: checkpoint and restore the RNG state (`random.getstate()`)
+alongside (episode index, Q, N, config), or a resumed run diverges from a same-seed
+uninterrupted one and determinism is lost.
+
 ## Module map (current)
 
 - `blackjack_rl/state.py` — `encode_state`, `StateKey`

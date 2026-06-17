@@ -5,9 +5,7 @@ own folder under ``runs/``, and never overwrites a previous run. Comparing two v
 then reading two records, not scrolling terminal output. Mirrors the pathfinding-ml pattern
 (D8).
 
-This module is the generic I/O: it saves any JSON-able record. Assembling the record for a
-specific run (config + metrics + Q-table + per-state visit counts, with state-key flattening)
-lives with the trainer that produces those artifacts (Stage 2).
+This module is the generic I/O: it saves and loads any JSON-able record.
 """
 from __future__ import annotations
 
@@ -68,3 +66,11 @@ def save_run(
     }
     (run_dir / "record.json").write_text(json.dumps(full, indent=2, default=str))
     return run_dir
+
+
+def load_record(run: Path | str) -> dict[str, Any]:
+    """Read a run's ``record.json``. Accepts either the run directory or the json path."""
+    path = Path(run)
+    if path.is_dir():
+        path = path / "record.json"
+    return json.loads(path.read_text())
