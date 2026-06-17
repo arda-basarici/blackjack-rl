@@ -99,10 +99,49 @@ essential detail when we add it: checkpoint and restore the RNG state (`random.g
 alongside (episode index, Q, N, config), or a resumed run diverges from a same-seed
 uninterrupted one and determinism is lost.
 
+### A8 — Exploration is configurable; value-updates can be recency-weighted
+Exploration is a pluggable schedule (`schedules.py`: constant / linear / exponential /
+harmonic), and the Q-update can use a constant step-size alpha instead of the 1/N sample
+average. Both are config-driven and default to the original behaviour (constant epsilon,
+sample average), so earlier runs reproduce. Motivation, from the policy-diff investigation:
+fixed-epsilon on-policy MC control has an **exploration-vs-bias tradeoff** — low epsilon keeps
+the common "stiff" hands clean but never samples the rare soft doubles; high epsilon samples
+them but biases the values (Q[hit] is depressed by the noisy on-policy continuation) and
+breaks the stiffs. Decaying epsilon is the textbook fix, but only with a recency-weighted
+update: a 1/N sample average cannot forget the early high-epsilon returns, so decay *alone*
+behaves like a mid-epsilon fixed run (confirmed empirically). The decision logged here is that
+the machinery exists and why; the best concrete setting (schedule + alpha) is being decided by
+experiment. *Empirical verdict: pending the decay+alpha run.*
+
+### A9 — Saved runs are self-contained, re-loadable, comparable
+Each run's record carries the full Q-table and visit counts (D8 / D10), so `load_agent`
+rebuilds the trained policy from a record with **no retraining**. This enables re-evaluating a
+policy at more hands or other seeds for a tighter CI (`python -m blackjack_rl.evaluate`), and
+comparing variants by reading their records (the investigation notebook's experiment ledger).
+Re-evaluation recomputes only the *edge*; fidelity (agreement / categories) is a property of
+the policy and is read straight from the record.
+
+### A10 — Learning-curve instrumentation: size training, don't guess it
+`train` emits a checkpoint every `progress_every` episodes (policy churn = greedy cells
+changed since the last checkpoint, min state visit count, states covered, current epsilon),
+collected into the run record as `learning_curve`. This makes convergence *visible*: the
+policy-churn knee shows how many episodes are actually needed, and confirms edge converges
+earlier than rare-cell fidelity — so experiments can stop at the plateau instead of guessing.
+Churn uses a deterministic argmax (not the random-tie-break greedy) so ties don't register as
+spurious change; with constant-alpha, churn settles to a small plateau rather than zero.
+
 ## Module map (current)
 
 - `blackjack_rl/state.py` — `encode_state`, `StateKey`
 - `blackjack_rl/env.py` — `Episode`, `rollout`, `rollout_many`, `problem_a_config`, `_Recorder`
-- `blackjack_rl/config.py` — `ExperimentConfig`
-- `blackjack_rl/persistence.py` — `git_hash`, `save_run`
-- `blackjack_rl/agents/`, `training/`, `evaluation/` — Stage 2+
+- `blackjack_rl/config.py` — `ExperimentConfig` (epsilon schedule + step_size knobs)
+- `blackjack_rl/schedules.py` — `make_epsilon_schedule`, `KINDS`
+- `blackjack_rl/util.py` — `format_duration`
+- `blackjack_rl/persistence.py` — `git_hash`, `save_run`, `load_record`
+- `blackjack_rl/agents/tabular.py` — `TabularAgent` (Q/N, epsilon-greedy, constant-alpha option)
+- `blackjack_rl/training/monte_carlo.py` — `train`, `_apply_episode`
+- `blackjack_rl/evaluation/metrics.py` — `evaluate_policy`, `GreedyPolicy`, `EdgeResult`
+- `blackjack_rl/evaluation/policy_diff.py` — `diff_policy`, `classify`, `CellDiff`, `DiffReport`
+- `blackjack_rl/experiment.py` — `run_experiment`, `load_agent`, `RunResult`
+- `blackjack_rl/__main__.py` — training CLI · `blackjack_rl/evaluate.py` — re-evaluate CLI
+- `analysis/policy_investigation.ipynb` — the policy-diff investigation

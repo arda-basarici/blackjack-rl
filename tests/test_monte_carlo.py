@@ -1,8 +1,8 @@
 """Tests for blackjack_rl.training.monte_carlo — mechanics only.
 
 Whether the agent learns *good blackjack* is a statistical claim (house edge, policy-diff vs
-basic strategy) and is validated in the evaluation sub-unit, not here. These tests check the
-credit-assignment maths and that training is deterministic.
+basic strategy) validated in the evaluation sub-unit, not here. These tests check the
+credit-assignment maths, determinism, and the learning-curve instrumentation.
 """
 from blackjack_rl.agents.tabular import TabularAgent
 from blackjack_rl.config import ExperimentConfig
@@ -40,3 +40,13 @@ def test_train_is_reproducible_under_seed() -> None:
     b = train(ExperimentConfig(num_episodes=1000, seed=7))
     assert a.q == b.q
     assert a.n == b.n
+
+
+def test_train_emits_learning_curve() -> None:
+    curve: list[dict] = []
+    train(ExperimentConfig(num_episodes=2000, seed=1), progress_every=500, on_checkpoint=curve.append)
+    assert [p["episode"] for p in curve] == [500, 1000, 1500, 2000]
+    expected_keys = {"episode", "epsilon", "policy_churn", "min_state_visits", "states"}
+    for point in curve:
+        assert expected_keys <= point.keys()
+        assert point["policy_churn"] >= 0

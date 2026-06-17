@@ -104,7 +104,8 @@ def run_experiment(
         f"[{started:%Y-%m-%d %H:%M:%S}] training {config.num_episodes:,} episodes "
         f"(seed {config.seed}, {explore}, {update}) ..."
     )
-    agent = train(config, progress_every=progress_every)
+    learning_curve: list[dict] = []
+    agent = train(config, progress_every=progress_every, on_checkpoint=learning_curve.append)
     train_seconds = time.perf_counter() - t0
     log(f"  training done in {format_duration(train_seconds)}")
 
@@ -144,6 +145,7 @@ def run_experiment(
             "cells": [asdict(cell) for cell in report.cells],
         },
         "qtable": _qtable_records(agent),
+        "learning_curve": learning_curve,
     }
     target = runs_dir if runs_dir is not None else DEFAULT_RUNS_DIR
     run_dir = save_run(target, record)
