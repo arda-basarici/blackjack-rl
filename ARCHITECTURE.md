@@ -142,6 +142,31 @@ point is the **branching credit assignment**: each split sub-hand's decisions ar
 net - not the whole hand's total dumped on every step (D6's "tree, not chain"). Evaluation,
 persistence, and the Strategy interface are unchanged.
 
+### A12 — Exploring starts: the capstone that proves the residual is coverage (Problem A)
+The investigation's central claim — the residual gap to basic strategy is *coverage* (rare cells are
+rarely experienced, so rarely learned) — is tested directly with **Monte-Carlo Exploring Starts**:
+every episode begins from a deliberately chosen (state, action) pair (uniform over all 1,090 legal
+2-card decision starts), then follows the greedy policy (no epsilon — the start *is* the exploration;
+the Sutton & Barto variant). Built **without touching the engine**: `PreparedDeck` subclasses the
+engine `Deck` to deal a forced prefix (player-1, dealer-up, player-2) then a random shoe, and
+`ForcedFirstAction` wraps a `Strategy` to seed the first action; both are handed to the unmodified
+`HandSimulator`. The agent, MC update, encode, evaluate/diff, and persistence are **reused by import**
+— the run saves a normal record stamped `method="exploring_starts"`, so it sits in the ledger
+alongside the others. The dealer hole stays random (dealer-blackjack episodes are discarded, matching
+the natural conditional under which a state is actually played). Greedy follow-on with constant-alpha;
+the global RNG is seeded once (reproducible).
+
+*Empirical verdict — the prediction held.* Forcing coverage collapsed genuine disagreements from 30
+(decay+alpha+splits) to **9**, and **every survivor is a near-tie** (max ev_gap ~0.06, vs ~0.22
+before): the previously under-split rare pairs (3,3 / 4,4 / 9,9 / 2,2-v6) flip to *split*, the
+under-explored doubles clear, and the edge moves to basic strategy (per the 1M-hand ledger eval). What
+remains is the **representation / near-tie floor** we predicted would survive — genuinely-tied
+decisions where "wrong" costs almost nothing. The residual *was* mostly the cost of learning from
+experience; the experiment earned the claim rather than asserting it. Two honest limits, both logged
+in the notebook: the edge claim rests on the 1M re-eval (not the noisy 200k figure in the record), and
+ES forces *2-card* starts, so a few thin deep / post-split states (the `under_visited` cells) aren't
+seeded — coverage is near-uniform over decision *starts*, not literally every reachable state.
+
 ## Module map (current)
 
 - `blackjack_rl/state.py` — `encode_state`, `StateKey`
@@ -152,6 +177,7 @@ persistence, and the Strategy interface are unchanged.
 - `blackjack_rl/persistence.py` — `git_hash`, `save_run`, `load_record`
 - `blackjack_rl/agents/tabular.py` — `TabularAgent` (Q/N, epsilon-greedy, constant-alpha option)
 - `blackjack_rl/training/monte_carlo.py` — `train`, `_apply_episode`
+- `blackjack_rl/training/exploring_starts.py` — `PreparedDeck`, `ForcedFirstAction`, `start_cards_for`, `enumerate_start_pairs`, `es_rollout`, `train_exploring_starts`, `run_exploring_starts` + CLI (the ES capstone, A12)
 - `blackjack_rl/evaluation/metrics.py` — `evaluate_policy`, `GreedyPolicy`, `EdgeResult`
 - `blackjack_rl/evaluation/policy_diff.py` — `diff_policy`, `classify`, `CellDiff`, `DiffReport`
 - `blackjack_rl/experiment.py` — `run_experiment`, `load_agent`, `RunResult`
