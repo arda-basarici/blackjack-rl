@@ -39,6 +39,31 @@ class Episode:
     reward: float
 
 
+@dataclass(frozen=True)
+class Step:
+    """One decision as the DQN trainer needs it — a torch-free, engine-free projection of the
+    engine's ``DecisionRecord``. Carries the fields ``encode_features`` reads (value, soft, upcard,
+    can_split) plus ``can_double`` for the legal-action mask, and the chosen action. (``encode_
+    features`` duck-types on this, exactly as ``encode_state`` does on a record via ``StateLike``.)
+    """
+
+    player_value: int
+    player_is_soft: bool
+    dealer_upcard: int
+    can_split: bool
+    can_double: bool
+    action: Action
+
+
+@dataclass
+class CapturedHand:
+    """A played hand for TD reconstruction: the decision ``steps`` in play order plus the hand
+    ``reward`` (total payout, bet = 1). ``steps`` may be empty (a dealt blackjack — no decision)."""
+
+    steps: list[Step]
+    reward: float
+
+
 def problem_a_config() -> SimulatorConfig:
     """Rules for Problem A: the 6-deck S17 3:2 anchor config, counting OFF. A fresh shoe per
     rollout makes hands independent and counting-free — a clean MDP."""
@@ -69,6 +94,34 @@ def rollout(
         if r.action != "none"
     ]
     return Episode(steps=steps, reward=result.payout)
+
+
+def capture_hand(policy: Strategy, config: SimulatorConfig | None = None) -> CapturedHand:
+    """Play one hand and capture it as a ``CapturedHand`` for TD transition reconstruction.
+
+    Parallels ``rollout`` but keeps the per-decision legality (``can_double``) the DQN target
+    needs and ``Episode`` discards. Engine-format knowledge stays in this module (D7/A1); the
+    trainer consumes only ``Step``s. Fresh shoe per call (Problem A); seed the global RNG once
+    before repeated calls.
+    """
+    cfg = config if config is not None else problem_a_config()
+    deck = Deck(num_decks=cfg.num_decks)  # fresh shoe, shuffled in __init__
+    result = HandSimulator(cfg, deck, policy).play_hand(
+        session_id="ep", bankroll=0.0, bet_size=1.0, hands_played=0
+    )
+    steps = [
+        Step(
+            player_value=r.player_value,
+            player_is_soft=r.player_is_soft,
+            dealer_upcard=r.dealer_upcard,
+            can_split=r.can_split,
+            can_double=r.can_double,
+            action=r.action,
+        )
+        for r in result.decision_records
+        if r.action != "none"
+    ]
+    return CapturedHand(steps=steps, reward=result.payout)
 
 
 def rollout_many(

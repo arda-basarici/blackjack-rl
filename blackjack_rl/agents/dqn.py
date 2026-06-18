@@ -27,6 +27,8 @@ from torch import nn
 from simulator.game_state import Action, GameState
 from strategies.base import Strategy
 
+from blackjack_rl.state import StateLike
+
 # Action sets mirror TabularAgent so the two agents share one action space (and the evaluator /
 # policy-diff treat them identically). Split is offered only with_splits; surrender is off in
 # problem_a_config. double/split are only ever *selected* when the state actually allows them
@@ -37,7 +39,7 @@ _SPLIT_ACTIONS: tuple[Action, ...] = ("hit", "stand", "double", "split")
 _NEG_INF = float("-inf")
 
 
-def encode_features(state: GameState, with_splits: bool = False) -> list[float]:
+def encode_features(state: StateLike, with_splits: bool = False) -> list[float]:
     """Scalar state encoding for the network (CONCEPTS.md section 18) — the *same* state the
     table keys on, expressed as normalized numbers so generalization across neighbours is
     possible.
@@ -110,6 +112,11 @@ class DQNAgent(Strategy):
         self._action_index: dict[Action, int] = {a: i for i, a in enumerate(self._actions)}
         in_dim = 4 if with_splits else 3
         self.q_net = QNetwork(in_dim, len(self._actions), hidden)
+
+    @property
+    def actions(self) -> tuple[Action, ...]:
+        """The agent's action space, in output order — the trainer aligns masks to this."""
+        return self._actions
 
     # --- Strategy contract (training behaviour policy) -----------------------
     def decide(self, state: GameState) -> Action:
