@@ -9,8 +9,8 @@ description = "Phase 3 — an RL agent that learns blackjack, audited against th
 requires-python = ">=3.13"
 dependencies = [
     "numpy",
-    # torch is deliberately NOT here yet: Stages 1-4 are tabular (numpy only).
-    # It is added at Stage 5 (the DQN), where we will also confirm the 3.13 wheel.
+    # Added at Stage 5 (the DQN). Needs a cp313 wheel: torch >= 2.5 ships one.
+    "torch>=2.5",
 ]
 
 [project.optional-dependencies]
