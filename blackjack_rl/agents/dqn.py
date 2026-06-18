@@ -39,26 +39,57 @@ _SPLIT_ACTIONS: tuple[Action, ...] = ("hit", "stand", "double", "split")
 _NEG_INF = float("-inf")
 
 
-def encode_features(state: StateLike, with_splits: bool = False) -> list[float]:
-    """Scalar state encoding for the network (CONCEPTS.md section 18) — the *same* state the
-    table keys on, expressed as normalized numbers so generalization across neighbours is
-    possible.
+# One-hot bin ranges: player totals 4..21 (18 bins), dealer upcards 2..11 (10 bins, 11 = ace).
+_TOTAL_LO, _TOTAL_HI = 4, 21
+_UPCARD_LO, _UPCARD_HI = 2, 11
+ENCODINGS: tuple[str, ...] = ("scalar", "onehot")
 
-    - ``player_value`` 4..21  -> ~[0, 1]
-    - ``player_is_soft``      -> 0.0 / 1.0
-    - ``dealer_upcard`` 2..11 -> ~[0, 1]
-    - with splits, append ``can_split`` (0.0 / 1.0): it identifies the pair, which genuinely
-      changes the right play, so it is a real *feature* — unlike ``can_double``, which only gates
-      availability and is handled by masking.
 
-    Normalization keeps every input on a common small scale so no single feature dominates the
-    gradients (large raw values like 21 would otherwise swamp a 0/1 flag).
+def feature_dim(encoding: str = "scalar", with_splits: bool = False) -> int:
+    """Input width for ``encoding`` — so the agent and network agree without hardcoding."""
+    if encoding == "scalar":
+        base = 3
+    elif encoding == "onehot":
+        base = (_TOTAL_HI - _TOTAL_LO + 1) + 1 + (_UPCARD_HI - _UPCARD_LO + 1)  # total + soft + upcard
+    else:
+        raise ValueError(f"unknown encoding {encoding!r}; expected one of {ENCODINGS}")
+    return base + (1 if with_splits else 0)
+
+
+def _onehot(value: int, lo: int, hi: int) -> list[float]:
+    """A one-hot block over [lo, hi], clamped to range."""
+    vec = [0.0] * (hi - lo + 1)
+    vec[min(max(value, lo), hi) - lo] = 1.0
+    return vec
+
+
+def encode_features(
+    state: StateLike, with_splits: bool = False, encoding: str = "scalar"
+) -> list[float]:
+    """State features for the network — the *same* information either way, but a different prior
+    about distance (CONCEPTS.md sections 18-19, 21):
+
+    - **"scalar"**: player_value / soft / dealer_upcard as normalized numbers. A *smoothness prior*
+      — nearby totals must behave similarly. Generalizes, but smears the sharp soft-hand / upcard
+      boundaries where the optimal action flips between neighbours.
+    - **"onehot"**: player_value and dealer_upcard as one-hot blocks (categorical — each value its
+      own input, free to differ sharply), with soft kept as a 0/1 flag. Sharp where blackjack is
+      sharp; gives up the smooth-ordering generalization.
+
+    With splits, append ``can_split`` as a flag either way (it pins the pair; A11).
     """
-    feats = [
-        (state.player_value - 4) / 17.0,
-        float(state.player_is_soft),
-        (state.dealer_upcard - 2) / 9.0,
-    ]
+    if encoding == "scalar":
+        feats = [
+            (state.player_value - 4) / 17.0,
+            float(state.player_is_soft),
+            (state.dealer_upcard - 2) / 9.0,
+        ]
+    elif encoding == "onehot":
+        feats = _onehot(state.player_value, _TOTAL_LO, _TOTAL_HI)
+        feats.append(float(state.player_is_soft))
+        feats += _onehot(state.dealer_upcard, _UPCARD_LO, _UPCARD_HI)
+    else:
+        raise ValueError(f"unknown encoding {encoding!r}; expected one of {ENCODINGS}")
     if with_splits:
         feats.append(float(state.can_split))
     return feats
@@ -105,13 +136,14 @@ class DQNAgent(Strategy):
         epsilon: float = 0.1,
         with_splits: bool = False,
         hidden: Sequence[int] = (64, 64),
+        encoding: str = "scalar",
     ) -> None:
         self.epsilon = epsilon
         self.with_splits = with_splits
+        self.encoding = encoding
         self._actions: tuple[Action, ...] = _SPLIT_ACTIONS if with_splits else _STAGE2_ACTIONS
         self._action_index: dict[Action, int] = {a: i for i, a in enumerate(self._actions)}
-        in_dim = 4 if with_splits else 3
-        self.q_net = QNetwork(in_dim, len(self._actions), hidden)
+        self.q_net = QNetwork(feature_dim(encoding, with_splits), len(self._actions), hidden)
 
     @property
     def actions(self) -> tuple[Action, ...]:
@@ -138,7 +170,7 @@ class DQNAgent(Strategy):
     def q_values(self, state: GameState) -> torch.Tensor:
         """Raw Q(state, .) for every action in ``self._actions``, unmasked. Inference only
         (no grad) — the training loop calls ``self.q_net`` directly when it needs gradients."""
-        x = torch.tensor(encode_features(state, self.with_splits), dtype=torch.float32)
+        x = torch.tensor(encode_features(state, self.with_splits, self.encoding), dtype=torch.float32)
         with torch.no_grad():
             return self.q_net(x)
 

@@ -59,7 +59,7 @@ def _legal_mask(step: Step, actions: Sequence[Action]) -> torch.Tensor:
 
 
 def hand_to_transitions(
-    hand: CapturedHand, actions: Sequence[Action], with_splits: bool = False
+    hand: CapturedHand, actions: Sequence[Action], with_splits: bool = False, encoding: str = "scalar"
 ) -> list[Transition]:
     """Reconstruct TD transitions from a captured **no-split** hand (a single decision chain).
 
@@ -76,7 +76,7 @@ def hand_to_transitions(
     transitions: list[Transition] = []
     last = len(hand.steps) - 1
     for i, step in enumerate(hand.steps):
-        state = torch.tensor(encode_features(step, with_splits), dtype=torch.float32)
+        state = torch.tensor(encode_features(step, with_splits, encoding), dtype=torch.float32)
         if i == last:  # terminal decision: carries the payout, no bootstrap
             transitions.append(
                 Transition(
@@ -95,7 +95,7 @@ def hand_to_transitions(
                     state=state,
                     action=action_index[step.action],
                     reward=0.0,
-                    next_state=torch.tensor(encode_features(nxt, with_splits), dtype=torch.float32),
+                    next_state=torch.tensor(encode_features(nxt, with_splits, encoding), dtype=torch.float32),
                     done=False,
                     next_legal_mask=_legal_mask(nxt, actions),
                 )
@@ -178,7 +178,10 @@ def train_dqn(
     # overhead that dominates on small tensors. Revisit if Problem B uses a larger network.
     torch.set_num_threads(1)
 
-    agent = DQNAgent(epsilon=config.epsilon, with_splits=config.with_splits, hidden=config.hidden)
+    agent = DQNAgent(
+        epsilon=config.epsilon, with_splits=config.with_splits, hidden=config.hidden,
+        encoding=config.encoding,
+    )
     target = make_target(agent.q_net)
     optimizer = torch.optim.Adam(agent.q_net.parameters(), lr=config.lr)
     buffer = ReplayBuffer(capacity=config.buffer_capacity)
@@ -200,7 +203,7 @@ def train_dqn(
     for i in range(total):
         agent.epsilon = epsilon_at(i)
         hand = capture_hand(agent, env_config)
-        for transition in hand_to_transitions(hand, agent.actions, config.with_splits):
+        for transition in hand_to_transitions(hand, agent.actions, config.with_splits, config.encoding):
             buffer.push(transition)
             env_steps += 1
             ready = len(buffer) >= config.warmup and buffer.can_sample(config.batch_size)

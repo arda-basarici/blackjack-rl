@@ -86,6 +86,8 @@ class DQNConfig:
     target_sync_every : hard-sync the target network every this many gradient steps.
     double_dqn        : Double-DQN targets (select next action with the online net, evaluate with
                         the target net) to curb the max-overestimation bias. Off = vanilla DQN.
+    encoding          : input encoding — "scalar" (smooth/ordered prior) or "onehot" (total + upcard
+                        as categories, sharp where blackjack is sharp). See CONCEPTS §21.
     with_splits       : enable the split action + pair-aware state (A11); off = no-split A.
     seed              : seed for both RNGs (random for engine/replay, torch for weights).
     """
@@ -105,6 +107,7 @@ class DQNConfig:
     train_every: int = 4
     target_sync_every: int = 1_000
     double_dqn: bool = False
+    encoding: str = "scalar"
     with_splits: bool = False
     seed: int = 42
 
@@ -138,3 +141,5 @@ class DQNConfig:
             raise ValueError("batch_size cannot exceed buffer_capacity")
         if not self.hidden:
             raise ValueError("hidden must have at least one layer")
+        if self.encoding not in ("scalar", "onehot"):
+            raise ValueError(f"encoding must be 'scalar' or 'onehot', got {self.encoding!r}")

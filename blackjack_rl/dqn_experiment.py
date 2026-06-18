@@ -202,6 +202,7 @@ def main() -> None:
     parser.add_argument("--train-every", type=int, default=4, help="train only every N decisions (replay ratio; 1 = every step)")
     parser.add_argument("--target-sync", type=int, default=1_000, help="hard-sync target every N steps")
     parser.add_argument("--double-dqn", action="store_true", help="use Double-DQN targets (curb overestimation)")
+    parser.add_argument("--encoding", choices=("scalar", "onehot"), default="scalar", help="input encoding for total+upcard")
     parser.add_argument("--with-splits", action="store_true", help="enable split action + pair state")
     parser.add_argument("--eval-hands", type=int, default=200_000, help="hands for edge eval")
     parser.add_argument("--eval-seed", type=int, default=0, help="eval RNG seed")
@@ -228,6 +229,7 @@ def main() -> None:
         train_every=args.train_every,
         target_sync_every=args.target_sync,
         double_dqn=args.double_dqn,
+        encoding=args.encoding,
         with_splits=args.with_splits,
         seed=args.seed,
     )
