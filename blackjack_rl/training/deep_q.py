@@ -105,20 +105,33 @@ def hand_to_transitions(
 
 # --- the TD update (one gradient step of deep Q-learning) --------------------
 
-def td_target(target: QNetwork, batch: Batch, gamma: float = 1.0) -> torch.Tensor:
+def td_target(
+    target: QNetwork, batch: Batch, gamma: float = 1.0, online: QNetwork | None = None
+) -> torch.Tensor:
     """The TD target y for each transition: ``r`` for terminal steps, else
-    ``r + gamma * max_{a' legal} Q_target(s', a')``.
+    ``r + gamma * Q(s', a*)`` where a* is the best legal next action.
 
-    Illegal next actions are masked to -inf before the max so the bootstrap never leaks the value
-    of an unavailable action, and the bootstrap is zeroed on terminal steps. ``torch.where`` (not a
-    ``* (1 - done)`` multiply) selects the zero, so the terminal rows' -inf max is never multiplied
-    — avoiding a ``-inf * 0 = NaN``. No gradient flows through the target net.
+    Two ways to pick and value a*:
+    - **vanilla DQN** (``online is None``): the target net both selects and evaluates —
+      ``a* = argmax Q_target``, value ``= max Q_target``. Simple, but the ``max`` over noisy
+      estimates systematically *overestimates*.
+    - **Double DQN** (``online`` given): select with the online net (``a* = argmax Q_online``) but
+      read the value from the target net (``Q_target(s', a*)``). Decoupling selection from
+      evaluation removes most of that upward bias.
+
+    Illegal next actions are masked to -inf before the argmax so a* is always legal. The bootstrap
+    is zeroed on terminal steps via ``torch.where`` (never a ``-inf * 0 = NaN``). No gradient flows
+    through the target.
     """
     with torch.no_grad():
-        q_next = target(batch.next_states)                                   # [B, n_actions]
-        masked = q_next.masked_fill(~batch.next_legal_masks, float("-inf"))
-        max_next = masked.max(dim=1).values                                  # [B]
-        bootstrap = torch.where(batch.dones, torch.zeros_like(max_next), max_next)
+        if online is None:  # vanilla: target net selects and evaluates
+            masked = target(batch.next_states).masked_fill(~batch.next_legal_masks, float("-inf"))
+            next_value = masked.max(dim=1).values                            # [B]
+        else:  # Double DQN: online selects (legal only), target evaluates
+            online_q = online(batch.next_states).masked_fill(~batch.next_legal_masks, float("-inf"))
+            best = online_q.argmax(dim=1, keepdim=True)                      # [B, 1]
+            next_value = target(batch.next_states).gather(1, best).squeeze(1)  # [B]
+        bootstrap = torch.where(batch.dones, torch.zeros_like(next_value), next_value)
         return batch.rewards + gamma * bootstrap
 
 
@@ -128,12 +141,14 @@ def td_update(
     batch: Batch,
     optimizer: torch.optim.Optimizer,
     gamma: float = 1.0,
+    double: bool = False,
 ) -> float:
     """One gradient step of deep Q-learning on ``batch``: Huber (smooth-L1) loss between the online
-    ``Q(s, a)`` of the taken actions and the TD target from the frozen target net. Returns the loss
-    value (for the learning curve). Gradients flow only through the online net."""
+    ``Q(s, a)`` of the taken actions and the TD target from the frozen target net. ``double`` uses
+    Double-DQN targets. Returns the loss value (for the learning curve). Gradients flow only through
+    the online net."""
     q_taken = online(batch.states).gather(1, batch.actions.unsqueeze(1)).squeeze(1)  # [B]
-    y = td_target(target, batch, gamma)
+    y = td_target(target, batch, gamma, online=online if double else None)
     loss = F.smooth_l1_loss(q_taken, y)
     optimizer.zero_grad()
     loss.backward()
@@ -192,7 +207,8 @@ def train_dqn(
             if ready and env_steps % config.train_every == 0:
                 for _ in range(config.updates_per_step):
                     loss = td_update(
-                        agent.q_net, target, buffer.sample(config.batch_size), optimizer, config.gamma
+                        agent.q_net, target, buffer.sample(config.batch_size), optimizer,
+                        config.gamma, double=config.double_dqn,
                     )
                     loss_sum += loss
                     loss_count += 1

@@ -84,6 +84,8 @@ class DQNConfig:
     train_every       : fire a training event only every this many decisions (the replay ratio;
                         4 = DeepMind's DQN — fewer, less-redundant updates, much faster than 1).
     target_sync_every : hard-sync the target network every this many gradient steps.
+    double_dqn        : Double-DQN targets (select next action with the online net, evaluate with
+                        the target net) to curb the max-overestimation bias. Off = vanilla DQN.
     with_splits       : enable the split action + pair-aware state (A11); off = no-split A.
     seed              : seed for both RNGs (random for engine/replay, torch for weights).
     """
@@ -102,6 +104,7 @@ class DQNConfig:
     updates_per_step: int = 1
     train_every: int = 4
     target_sync_every: int = 1_000
+    double_dqn: bool = False
     with_splits: bool = False
     seed: int = 42
 

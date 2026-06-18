@@ -31,6 +31,24 @@ from blackjack_rl.training.deep_q import train_dqn
 from blackjack_rl.util import format_duration
 
 DEFAULT_RUNS_DIR = Path(__file__).resolve().parent.parent / "runs"
+DEFAULT_LOGS_DIR = Path(__file__).resolve().parent.parent / "logs"
+
+
+class _Tee:
+    """Write a stream to several sinks at once (terminal + log file), so a run's progress is both
+    visible live and saved for later comparison."""
+
+    def __init__(self, *sinks) -> None:
+        self._sinks = sinks
+
+    def write(self, data: str) -> int:
+        for s in self._sinks:
+            s.write(data)
+        return len(data)
+
+    def flush(self) -> None:
+        for s in self._sinks:
+            s.flush()
 
 
 @dataclass(frozen=True)
@@ -183,6 +201,7 @@ def main() -> None:
     parser.add_argument("--updates-per-step", type=int, default=1, help="gradient steps per training event")
     parser.add_argument("--train-every", type=int, default=4, help="train only every N decisions (replay ratio; 1 = every step)")
     parser.add_argument("--target-sync", type=int, default=1_000, help="hard-sync target every N steps")
+    parser.add_argument("--double-dqn", action="store_true", help="use Double-DQN targets (curb overestimation)")
     parser.add_argument("--with-splits", action="store_true", help="enable split action + pair state")
     parser.add_argument("--eval-hands", type=int, default=200_000, help="hands for edge eval")
     parser.add_argument("--eval-seed", type=int, default=0, help="eval RNG seed")
@@ -190,6 +209,7 @@ def main() -> None:
     parser.add_argument("--progress-every", type=int, default=100_000, help="progress every N episodes (0 = silent)")
     parser.add_argument("--runs-dir", type=str, default=None, help="output dir (default: ./runs)")
     parser.add_argument("--no-save", action="store_true", help="do not persist the run")
+    parser.add_argument("--no-log", action="store_true", help="do not tee output to a logs/ file")
     args = parser.parse_args()
 
     config = DQNConfig(
@@ -207,20 +227,38 @@ def main() -> None:
         updates_per_step=args.updates_per_step,
         train_every=args.train_every,
         target_sync_every=args.target_sync,
+        double_dqn=args.double_dqn,
         with_splits=args.with_splits,
         seed=args.seed,
     )
-    result = run_dqn(
-        config,
-        eval_hands=args.eval_hands,
-        eval_seed=args.eval_seed,
-        ev_tol=args.ev_tol,
-        runs_dir=Path(args.runs_dir) if args.runs_dir else None,
-        progress_every=args.progress_every or None,
-        verbose=True,
-        save=not args.no_save,
-    )
-    _print_summary(result)
+    log_file = None
+    if not args.no_log:
+        DEFAULT_LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        log_path = DEFAULT_LOGS_DIR / f"dqn_{datetime.now():%Y%m%d-%H%M%S}_seed{args.seed}.log"
+        log_file = open(log_path, "w", encoding="utf-8")
+        sys.stdout = _Tee(sys.__stdout__, log_file)
+        sys.stderr = _Tee(sys.__stderr__, log_file)
+        print(
+            f"(logging to {log_path})  episodes={args.episodes} double_dqn={args.double_dqn} "
+            f"eps={args.epsilon_schedule} {args.epsilon_start}->{args.epsilon_end} lr={args.lr} "
+            f"train_every={args.train_every}"
+        )
+    try:
+        result = run_dqn(
+            config,
+            eval_hands=args.eval_hands,
+            eval_seed=args.eval_seed,
+            ev_tol=args.ev_tol,
+            runs_dir=Path(args.runs_dir) if args.runs_dir else None,
+            progress_every=args.progress_every or None,
+            verbose=True,
+            save=not args.no_save,
+        )
+        _print_summary(result)
+    finally:
+        if log_file is not None:
+            sys.stdout, sys.stderr = sys.__stdout__, sys.__stderr__
+            log_file.close()
 
 
 if __name__ == "__main__":
