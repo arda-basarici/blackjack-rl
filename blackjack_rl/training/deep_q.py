@@ -15,12 +15,13 @@ import copy
 from collections.abc import Sequence
 
 import torch
+from torch.nn import functional as F
 
 from simulator.game_state import Action
 
 from blackjack_rl.agents.dqn import QNetwork, encode_features
 from blackjack_rl.env import CapturedHand, Step
-from blackjack_rl.training.replay import Transition
+from blackjack_rl.training.replay import Batch, Transition
 
 
 def make_target(online: QNetwork) -> QNetwork:
@@ -92,3 +93,41 @@ def hand_to_transitions(
                 )
             )
     return transitions
+
+
+# --- the TD update (one gradient step of deep Q-learning) --------------------
+
+def td_target(target: QNetwork, batch: Batch, gamma: float = 1.0) -> torch.Tensor:
+    """The TD target y for each transition: ``r`` for terminal steps, else
+    ``r + gamma * max_{a' legal} Q_target(s', a')``.
+
+    Illegal next actions are masked to -inf before the max so the bootstrap never leaks the value
+    of an unavailable action, and the bootstrap is zeroed on terminal steps. ``torch.where`` (not a
+    ``* (1 - done)`` multiply) selects the zero, so the terminal rows' -inf max is never multiplied
+    — avoiding a ``-inf * 0 = NaN``. No gradient flows through the target net.
+    """
+    with torch.no_grad():
+        q_next = target(batch.next_states)                                   # [B, n_actions]
+        masked = q_next.masked_fill(~batch.next_legal_masks, float("-inf"))
+        max_next = masked.max(dim=1).values                                  # [B]
+        bootstrap = torch.where(batch.dones, torch.zeros_like(max_next), max_next)
+        return batch.rewards + gamma * bootstrap
+
+
+def td_update(
+    online: QNetwork,
+    target: QNetwork,
+    batch: Batch,
+    optimizer: torch.optim.Optimizer,
+    gamma: float = 1.0,
+) -> float:
+    """One gradient step of deep Q-learning on ``batch``: Huber (smooth-L1) loss between the online
+    ``Q(s, a)`` of the taken actions and the TD target from the frozen target net. Returns the loss
+    value (for the learning curve). Gradients flow only through the online net."""
+    q_taken = online(batch.states).gather(1, batch.actions.unsqueeze(1)).squeeze(1)  # [B]
+    y = td_target(target, batch, gamma)
+    loss = F.smooth_l1_loss(q_taken, y)
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+    return float(loss.item())
