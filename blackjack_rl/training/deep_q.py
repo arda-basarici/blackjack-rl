@@ -26,6 +26,7 @@ from simulator.game_state import Action
 from blackjack_rl.agents.dqn import DQNAgent, QNetwork, encode_features
 from blackjack_rl.config import DQNConfig
 from blackjack_rl.env import CapturedHand, Step, capture_hand, problem_a_config
+from blackjack_rl.evaluation.network_diff import diff_network
 from blackjack_rl.schedules import make_epsilon_schedule
 from blackjack_rl.training.replay import Batch, ReplayBuffer, Transition
 from blackjack_rl.util import format_duration
@@ -158,6 +159,9 @@ def train_dqn(
     """
     random.seed(config.seed)
     torch.manual_seed(config.seed)
+    # Tiny net (a few hundred params): single-threaded torch avoids the multi-thread dispatch
+    # overhead that dominates on small tensors. Revisit if Problem B uses a larger network.
+    torch.set_num_threads(1)
 
     agent = DQNAgent(epsilon=config.epsilon, with_splits=config.with_splits, hidden=config.hidden)
     target = make_target(agent.q_net)
@@ -174,6 +178,7 @@ def train_dqn(
 
     total = config.num_episodes
     start = time.perf_counter()
+    env_steps = 0  # decisions collected (the replay-ratio clock)
     grad_steps = 0
     loss_sum, loss_count = 0.0, 0  # accumulated since the last checkpoint
 
@@ -182,7 +187,9 @@ def train_dqn(
         hand = capture_hand(agent, env_config)
         for transition in hand_to_transitions(hand, agent.actions, config.with_splits):
             buffer.push(transition)
-            if len(buffer) >= config.warmup and buffer.can_sample(config.batch_size):
+            env_steps += 1
+            ready = len(buffer) >= config.warmup and buffer.can_sample(config.batch_size)
+            if ready and env_steps % config.train_every == 0:
                 for _ in range(config.updates_per_step):
                     loss = td_update(
                         agent.q_net, target, buffer.sample(config.batch_size), optimizer, config.gamma
@@ -199,10 +206,12 @@ def train_dqn(
             rate = done / elapsed if elapsed else 0.0
             eta = (total - done) / rate if rate else 0.0
             avg_loss = loss_sum / loss_count if loss_count else float("nan")
+            # cheap, deterministic policy-quality snapshot (240 cells) — measures convergence (A10)
+            agreement = diff_network(agent).agreement_unweighted
             print(
                 f"  {done:,}/{total:,} ({done / total:.0%})  elapsed {format_duration(elapsed)}  "
                 f"{rate:,.0f} hands/s  eta {format_duration(eta)}  eps {agent.epsilon:.3f}  "
-                f"grad_steps {grad_steps:,}  loss {avg_loss:.4f}",
+                f"grad_steps {grad_steps:,}  loss {avg_loss:.4f}  agree {agreement:.1%}",
                 file=sys.stderr,
             )
             if on_checkpoint is not None:
@@ -213,6 +222,7 @@ def train_dqn(
                         "grad_steps": grad_steps,
                         "buffer": len(buffer),
                         "recent_loss": round(avg_loss, 5) if loss_count else None,
+                        "agreement": round(agreement, 4),
                     }
                 )
             loss_sum, loss_count = 0.0, 0
