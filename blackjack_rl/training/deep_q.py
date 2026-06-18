@@ -12,16 +12,23 @@ every C steps, gives the online network a stationary goal to descend toward betw
 from __future__ import annotations
 
 import copy
+import random
+import sys
+import time
 from collections.abc import Sequence
+from typing import Callable
 
 import torch
 from torch.nn import functional as F
 
 from simulator.game_state import Action
 
-from blackjack_rl.agents.dqn import QNetwork, encode_features
-from blackjack_rl.env import CapturedHand, Step
-from blackjack_rl.training.replay import Batch, Transition
+from blackjack_rl.agents.dqn import DQNAgent, QNetwork, encode_features
+from blackjack_rl.config import DQNConfig
+from blackjack_rl.env import CapturedHand, Step, capture_hand, problem_a_config
+from blackjack_rl.schedules import make_epsilon_schedule
+from blackjack_rl.training.replay import Batch, ReplayBuffer, Transition
+from blackjack_rl.util import format_duration
 
 
 def make_target(online: QNetwork) -> QNetwork:
@@ -131,3 +138,82 @@ def td_update(
     loss.backward()
     optimizer.step()
     return float(loss.item())
+
+
+# --- the training loop (deep Q-learning over Problem A hands) -----------------
+
+def train_dqn(
+    config: DQNConfig,
+    progress_every: int | None = None,
+    on_checkpoint: Callable[[dict], None] | None = None,
+) -> DQNAgent:
+    """Train a ``DQNAgent`` by deep Q-learning over ``config.num_episodes`` hands on Problem A.
+
+    Seeds both RNGs once — ``random`` (engine shuffle, epsilon, replay sampling) and ``torch``
+    (weight init) — so the run is reproducible. Each hand: play it (epsilon-greedy on the current
+    net), reconstruct transitions, push them; after a warm-up, do ``updates_per_step`` gradient
+    steps per decision, hard-syncing the target every ``target_sync_every`` steps. Anneals epsilon
+    by the schedule and emits a learning curve via ``on_checkpoint``. Returns the trained agent.
+    No checkpoint/resume yet (A7): a crash loses the run, but a same-seed rerun reproduces it.
+    """
+    random.seed(config.seed)
+    torch.manual_seed(config.seed)
+
+    agent = DQNAgent(epsilon=config.epsilon, with_splits=config.with_splits, hidden=config.hidden)
+    target = make_target(agent.q_net)
+    optimizer = torch.optim.Adam(agent.q_net.parameters(), lr=config.lr)
+    buffer = ReplayBuffer(capacity=config.buffer_capacity)
+    env_config = problem_a_config()
+    epsilon_at = make_epsilon_schedule(
+        config.epsilon_schedule,
+        constant=config.epsilon,
+        start=config.epsilon_start,
+        end=config.epsilon_end,
+        num_episodes=config.num_episodes,
+    )
+
+    total = config.num_episodes
+    start = time.perf_counter()
+    grad_steps = 0
+    loss_sum, loss_count = 0.0, 0  # accumulated since the last checkpoint
+
+    for i in range(total):
+        agent.epsilon = epsilon_at(i)
+        hand = capture_hand(agent, env_config)
+        for transition in hand_to_transitions(hand, agent.actions, config.with_splits):
+            buffer.push(transition)
+            if len(buffer) >= config.warmup and buffer.can_sample(config.batch_size):
+                for _ in range(config.updates_per_step):
+                    loss = td_update(
+                        agent.q_net, target, buffer.sample(config.batch_size), optimizer, config.gamma
+                    )
+                    loss_sum += loss
+                    loss_count += 1
+                    grad_steps += 1
+                    if grad_steps % config.target_sync_every == 0:
+                        sync_target(target, agent.q_net)
+
+        if progress_every and (i + 1) % progress_every == 0:
+            done = i + 1
+            elapsed = time.perf_counter() - start
+            rate = done / elapsed if elapsed else 0.0
+            eta = (total - done) / rate if rate else 0.0
+            avg_loss = loss_sum / loss_count if loss_count else float("nan")
+            print(
+                f"  {done:,}/{total:,} ({done / total:.0%})  elapsed {format_duration(elapsed)}  "
+                f"{rate:,.0f} hands/s  eta {format_duration(eta)}  eps {agent.epsilon:.3f}  "
+                f"grad_steps {grad_steps:,}  loss {avg_loss:.4f}",
+                file=sys.stderr,
+            )
+            if on_checkpoint is not None:
+                on_checkpoint(
+                    {
+                        "episode": done,
+                        "epsilon": round(agent.epsilon, 4),
+                        "grad_steps": grad_steps,
+                        "buffer": len(buffer),
+                        "recent_loss": round(avg_loss, 5) if loss_count else None,
+                    }
+                )
+            loss_sum, loss_count = 0.0, 0
+    return agent

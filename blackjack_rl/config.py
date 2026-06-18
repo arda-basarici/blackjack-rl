@@ -60,3 +60,74 @@ class ExperimentConfig:
                 raise ValueError(f"{name} must be in [0, 1], got {value}")
         if self.step_size is not None and not 0.0 < self.step_size <= 1.0:
             raise ValueError(f"step_size must be in (0, 1], got {self.step_size}")
+
+
+@dataclass(frozen=True)
+class DQNConfig:
+    """Immutable hyperparameters for one deep-Q-network run (Stage 5).
+
+    A dedicated config rather than overloading ``ExperimentConfig``: the tabular ``step_size`` is
+    meaningless for a network, and ``lr`` / replay / target knobs are meaningless for the table, so
+    keeping them apart respects one-job-per-config. The exploration + bookkeeping knobs mirror
+    ``ExperimentConfig`` (train with exploration, evaluate greedily). ``gamma`` lives here — unlike
+    the tabular config — because the TD target uses it, though for terminal-only Problem A it is 1.0.
+
+    num_episodes      : number of hands to train on.
+    epsilon[_*]       : exploration rate / decaying schedule (reuses schedules.py).
+    hidden            : QNetwork hidden-layer sizes.
+    lr                : Adam learning rate.
+    gamma             : TD discount (1.0 for Problem A — reward is terminal-only).
+    batch_size        : replay minibatch size.
+    buffer_capacity   : replay ring-buffer size.
+    warmup            : transitions to collect before the first gradient step.
+    updates_per_step  : gradient steps per environment decision (the train ratio).
+    target_sync_every : hard-sync the target network every this many gradient steps.
+    with_splits       : enable the split action + pair-aware state (A11); off = no-split A.
+    seed              : seed for both RNGs (random for engine/replay, torch for weights).
+    """
+
+    num_episodes: int
+    epsilon: float = 0.1
+    epsilon_schedule: str = "constant"
+    epsilon_start: float = 0.3
+    epsilon_end: float = 0.0
+    hidden: tuple[int, ...] = (64, 64)
+    lr: float = 1e-3
+    gamma: float = 1.0
+    batch_size: int = 128
+    buffer_capacity: int = 50_000
+    warmup: int = 1_000
+    updates_per_step: int = 1
+    target_sync_every: int = 1_000
+    with_splits: bool = False
+    seed: int = 42
+
+    def __post_init__(self) -> None:
+        if self.num_episodes < 1:
+            raise ValueError(f"num_episodes must be >= 1, got {self.num_episodes}")
+        if self.epsilon_schedule not in KINDS:
+            raise ValueError(f"epsilon_schedule must be one of {KINDS}, got {self.epsilon_schedule!r}")
+        for name, value in (
+            ("epsilon", self.epsilon),
+            ("epsilon_start", self.epsilon_start),
+            ("epsilon_end", self.epsilon_end),
+        ):
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"{name} must be in [0, 1], got {value}")
+        if self.lr <= 0.0:
+            raise ValueError(f"lr must be > 0, got {self.lr}")
+        if not 0.0 <= self.gamma <= 1.0:
+            raise ValueError(f"gamma must be in [0, 1], got {self.gamma}")
+        for name, value in (
+            ("batch_size", self.batch_size),
+            ("buffer_capacity", self.buffer_capacity),
+            ("warmup", self.warmup),
+            ("updates_per_step", self.updates_per_step),
+            ("target_sync_every", self.target_sync_every),
+        ):
+            if value < 1:
+                raise ValueError(f"{name} must be >= 1, got {value}")
+        if self.batch_size > self.buffer_capacity:
+            raise ValueError("batch_size cannot exceed buffer_capacity")
+        if not self.hidden:
+            raise ValueError("hidden must have at least one layer")
