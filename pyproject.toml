@@ -17,6 +17,7 @@ dependencies = [
 dev = ["pytest", "ruff", "mypy"]
 # For the analysis notebooks in analysis/ (policy investigation, heatmaps).
 analysis = ["pandas", "matplotlib", "ipykernel"]
+report = ["seaborn", "reportlab"]
 
 # The Phase 2 engine is consumed via an editable install, not a declared dependency:
 #   pip install -e ../../phase2-data/blackjack-sim
@@ -31,3 +32,5 @@ line-length = 100
 [tool.mypy]
 python_version = "3.13"
 ignore_missing_imports = true
+
+
