@@ -15,8 +15,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "mypy"]
-# For the analysis notebooks in analysis/ (policy investigation, heatmaps).
-analysis = ["pandas", "matplotlib", "ipykernel"]
+# For the analysis notebooks in analysis/ (policy investigation, heatmaps, embedding/PCA).
+analysis = ["pandas", "matplotlib", "ipykernel", "scikit-learn"]
 report = ["seaborn", "reportlab"]
 
 # The Phase 2 engine is consumed via an editable install, not a declared dependency:

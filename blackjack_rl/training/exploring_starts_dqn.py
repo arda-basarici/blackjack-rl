@@ -93,7 +93,7 @@ def train_dqn_es(
     optimizer / Double-DQN machinery as ``train_dqn``. Both RNGs seeded once for reproducibility."""
     random.seed(config.seed)
     torch.manual_seed(config.seed)
-    torch.set_num_threads(1)
+    torch.set_num_threads(config.torch_threads())
 
     agent = DQNAgent(
         epsilon=0.0, with_splits=config.with_splits, hidden=config.hidden, encoding=config.encoding

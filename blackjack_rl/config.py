@@ -15,6 +15,7 @@ Problem B); algorithm/ruleset (provenance, recorded in the run, not tuned).
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 from blackjack_rl.schedules import KINDS
@@ -108,6 +109,10 @@ class DQNConfig:
                         progress_every set (it snapshots at checkpoints).
     with_splits       : enable the split action + pair-aware state (A11); off = no-split A.
     seed              : seed for both RNGs (random for engine/replay, torch for weights).
+    num_threads       : torch CPU threads for training matmuls. 1 = single-thread (bit-reproducible,
+                        best for tiny nets where dispatch overhead dominates). 0 = all cores. >1
+                        speeds up large nets (256+ hidden, big batches) but parallel float-reduction
+                        order means runs may not be bit-identical across machines.
     """
 
     num_episodes: int
@@ -134,10 +139,17 @@ class DQNConfig:
     swa: bool = False
     with_splits: bool = False
     seed: int = 42
+    num_threads: int = 1
+
+    def torch_threads(self) -> int:
+        """Resolve ``num_threads`` to a concrete count: 0 means all available cores."""
+        return self.num_threads if self.num_threads > 0 else (os.cpu_count() or 1)
 
     def __post_init__(self) -> None:
         if self.num_episodes < 1:
             raise ValueError(f"num_episodes must be >= 1, got {self.num_episodes}")
+        if self.num_threads < 0:
+            raise ValueError(f"num_threads must be >= 0 (0 = all cores), got {self.num_threads}")
         if self.epsilon_schedule not in KINDS:
             raise ValueError(f"epsilon_schedule must be one of {KINDS}, got {self.epsilon_schedule!r}")
         for name, value in (

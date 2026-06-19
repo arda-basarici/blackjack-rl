@@ -207,6 +207,7 @@ def main() -> None:
     )
     parser.add_argument("--episodes", type=int, default=2_000_000, help="training hands")
     parser.add_argument("--seed", type=int, default=42, help="training RNG seed (random + torch)")
+    parser.add_argument("--threads", type=int, default=1, help="torch CPU threads (1 = single/reproducible, 0 = all cores)")
     parser.add_argument("--epsilon", type=float, default=0.1, help="exploration rate (constant schedule)")
     parser.add_argument("--epsilon-schedule", choices=KINDS, default="linear", help="exploration schedule")
     parser.add_argument("--epsilon-start", type=float, default=0.3, help="start rate (decaying schedule)")
@@ -263,6 +264,7 @@ def main() -> None:
         swa=args.swa,
         with_splits=args.with_splits,
         seed=args.seed,
+        num_threads=args.threads,
     )
     log_file = None
     if not args.no_log:

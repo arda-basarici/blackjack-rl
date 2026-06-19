@@ -226,9 +226,9 @@ def train_dqn(
     """
     random.seed(config.seed)
     torch.manual_seed(config.seed)
-    # Tiny net (a few hundred params): single-threaded torch avoids the multi-thread dispatch
-    # overhead that dominates on small tensors. Revisit if Problem B uses a larger network.
-    torch.set_num_threads(1)
+    # Threads: 1 (default) avoids multi-thread dispatch overhead on tiny nets and keeps runs
+    # bit-reproducible; large nets / big batches benefit from more (config.num_threads, 0 = all).
+    torch.set_num_threads(config.torch_threads())
 
     agent = DQNAgent(
         epsilon=config.epsilon, with_splits=config.with_splits, hidden=config.hidden,
