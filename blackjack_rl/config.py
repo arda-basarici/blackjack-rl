@@ -90,6 +90,8 @@ class DQNConfig:
                         as categories, sharp where blackjack is sharp). See CONCEPTS §21.
     exploring_starts  : train with forced (state, action) starts (uniform coverage, greedy follow,
                         epsilon ignored) instead of natural epsilon-greedy play. The DQN capstone.
+    log_q_grid        : at each checkpoint, log Q for every action at every cell (all 240) so we
+                        can plot per-cell Q-trajectories. Off by default (keeps records small).
     with_splits       : enable the split action + pair-aware state (A11); off = no-split A.
     seed              : seed for both RNGs (random for engine/replay, torch for weights).
     """
@@ -111,6 +113,7 @@ class DQNConfig:
     double_dqn: bool = False
     encoding: str = "scalar"
     exploring_starts: bool = False
+    log_q_grid: bool = False
     with_splits: bool = False
     seed: int = 42
 

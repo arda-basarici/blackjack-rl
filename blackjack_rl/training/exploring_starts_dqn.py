@@ -31,6 +31,7 @@ from blackjack_rl.config import DQNConfig
 from blackjack_rl.env import CapturedHand, Step, problem_a_config
 from blackjack_rl.evaluation.network_diff import diff_network
 from blackjack_rl.training.deep_q import (
+    full_q_grid,
     hand_to_transitions,
     make_target,
     probe_q_values,
@@ -148,17 +149,18 @@ def train_dqn_es(
                 file=sys.stderr,
             )
             if on_checkpoint is not None:
-                on_checkpoint(
-                    {
-                        "episode": done,
-                        "epsilon": 0.0,
-                        "grad_steps": grad_steps,
-                        "buffer": len(buffer),
-                        "recent_loss": round(avg_loss, 5) if loss_count else None,
-                        "agreement": round(agreement, 4),
-                        "probe_q": probe_q_values(agent),
-                    }
-                )
+                cp = {
+                    "episode": done,
+                    "epsilon": 0.0,
+                    "grad_steps": grad_steps,
+                    "buffer": len(buffer),
+                    "recent_loss": round(avg_loss, 5) if loss_count else None,
+                    "agreement": round(agreement, 4),
+                    "probe_q": probe_q_values(agent),
+                }
+                if config.log_q_grid:
+                    cp["q_grid"] = full_q_grid(agent)
+                on_checkpoint(cp)
             loss_sum, loss_count = 0.0, 0
     agent.sample_counts = counts
     return agent

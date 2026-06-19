@@ -213,6 +213,7 @@ def main() -> None:
     parser.add_argument("--double-dqn", action="store_true", help="use Double-DQN targets (curb overestimation)")
     parser.add_argument("--encoding", choices=("scalar", "onehot"), default="scalar", help="input encoding for total+upcard")
     parser.add_argument("--exploring-starts", action="store_true", help="force (state,action) coverage (the DQN capstone)")
+    parser.add_argument("--log-q-grid", action="store_true", help="log full per-cell Q each checkpoint (for trajectory plots)")
     parser.add_argument("--with-splits", action="store_true", help="enable split action + pair state")
     parser.add_argument("--eval-hands", type=int, default=200_000, help="hands for edge eval")
     parser.add_argument("--eval-seed", type=int, default=0, help="eval RNG seed")
@@ -241,6 +242,7 @@ def main() -> None:
         double_dqn=args.double_dqn,
         encoding=args.encoding,
         exploring_starts=args.exploring_starts,
+        log_q_grid=args.log_q_grid,
         with_splits=args.with_splits,
         seed=args.seed,
     )

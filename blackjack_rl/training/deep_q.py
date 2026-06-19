@@ -26,7 +26,7 @@ from simulator.game_state import Action, GameState
 from blackjack_rl.agents.dqn import DQNAgent, QNetwork, encode_features
 from blackjack_rl.config import DQNConfig
 from blackjack_rl.env import CapturedHand, Step, capture_hand, problem_a_config
-from blackjack_rl.evaluation.network_diff import diff_network
+from blackjack_rl.evaluation.network_diff import diff_network, enumerate_cells
 from blackjack_rl.schedules import make_epsilon_schedule
 from blackjack_rl.training.replay import Batch, ReplayBuffer, Transition
 from blackjack_rl.util import format_duration
@@ -184,6 +184,19 @@ def probe_q_values(agent: DQNAgent, cells: tuple[tuple[int, bool, int], ...] = P
     return out
 
 
+def full_q_grid(agent: DQNAgent) -> dict:
+    """Q for every action at every one of the 240 canonical cells — a full snapshot, so per-cell
+    Q-trajectories can be plotted for *any* disagreement. 240 forward passes; logged at each
+    checkpoint only when ``DQNConfig.log_q_grid`` is set (keeps records small otherwise)."""
+    out: dict[str, dict] = {}
+    for value, is_soft, upcard in enumerate_cells():
+        q = agent.q_values(_probe_state(value, is_soft, upcard))
+        out[f"{'soft' if is_soft else 'hard'}{value}_v{upcard}"] = {
+            a: round(float(q[i]), 3) for i, a in enumerate(agent.actions)
+        }
+    return out
+
+
 # --- the training loop (deep Q-learning over Problem A hands) -----------------
 
 def train_dqn(
@@ -266,17 +279,18 @@ def train_dqn(
                 file=sys.stderr,
             )
             if on_checkpoint is not None:
-                on_checkpoint(
-                    {
-                        "episode": done,
-                        "epsilon": round(agent.epsilon, 4),
-                        "grad_steps": grad_steps,
-                        "buffer": len(buffer),
-                        "recent_loss": round(avg_loss, 5) if loss_count else None,
-                        "agreement": round(agreement, 4),
-                        "probe_q": probe_q_values(agent),
-                    }
-                )
+                cp = {
+                    "episode": done,
+                    "epsilon": round(agent.epsilon, 4),
+                    "grad_steps": grad_steps,
+                    "buffer": len(buffer),
+                    "recent_loss": round(avg_loss, 5) if loss_count else None,
+                    "agreement": round(agreement, 4),
+                    "probe_q": probe_q_values(agent),
+                }
+                if config.log_q_grid:
+                    cp["q_grid"] = full_q_grid(agent)
+                on_checkpoint(cp)
             loss_sum, loss_count = 0.0, 0
     agent.sample_counts = counts
     return agent
