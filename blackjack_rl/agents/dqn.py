@@ -116,6 +116,12 @@ class QNetwork(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # noqa: D102 (nn.Module convention)
         return self.net(x)
 
+    def features(self, x: torch.Tensor) -> torch.Tensor:
+        """Penultimate-layer activations (post final ReLU, before the output linear) — the learned
+        representation the Q head reads. For end-of-run representation analysis (PCA / t-SNE colored
+        by action / category); not used in training."""
+        return self.net[:-1](x)
+
 
 class DQNAgent(Strategy):
     """A Q-network policy behind the Strategy contract — interchangeable with ``TabularAgent``.

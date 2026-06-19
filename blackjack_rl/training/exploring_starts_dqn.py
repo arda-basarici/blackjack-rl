@@ -117,6 +117,7 @@ def train_dqn_es(
 
     total = config.num_episodes
     start = time.perf_counter()
+    last_t, last_done = start, 0  # window start for the interval (current) speed + eta
     env_steps = grad_steps = 0
     loss_sum, loss_count = 0.0, 0
     counts: dict = {}  # (value, soft, upcard, action) -> experience count
@@ -161,9 +162,12 @@ def train_dqn_es(
                     for k, v in sd.items():
                         swa_sum[k] += v.detach()
                 swa_n += 1
-            elapsed = time.perf_counter() - start
-            rate = done / elapsed if elapsed else 0.0
+            now = time.perf_counter()
+            elapsed = now - start
+            interval = now - last_t
+            rate = (done - last_done) / interval if interval else 0.0  # current speed, this window
             eta = (total - done) / rate if rate else 0.0
+            last_t, last_done = now, done
             avg_loss = loss_sum / loss_count if loss_count else float("nan")
             agreement = diff_network(agent).agreement_unweighted
             print(

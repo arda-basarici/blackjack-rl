@@ -18,6 +18,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 
+import torch
+
 from strategies.basic_strategy import BasicStrategy
 
 from blackjack_rl.agents.dqn import DQNAgent
@@ -147,6 +149,10 @@ def run_dqn(
         }
         target = runs_dir if runs_dir is not None else DEFAULT_RUNS_DIR
         run_dir = save_run(target, record)
+        # Persist the trained weights next to the record so the net is recoverable for end-of-run
+        # analysis (embeddings, re-probing) without retraining. Config in the record reconstructs
+        # the architecture; with SWA this saves the averaged net (the one we evaluate).
+        torch.save(agent.q_net.state_dict(), run_dir / "model.pt")
         log(f"saved run to {run_dir}")
 
     return DQNRunResult(
