@@ -144,6 +144,9 @@ class DQNAgent(Strategy):
         self._actions: tuple[Action, ...] = _SPLIT_ACTIONS if with_splits else _STAGE2_ACTIONS
         self._action_index: dict[Action, int] = {a: i for i, a in enumerate(self._actions)}
         self.q_net = QNetwork(feature_dim(encoding, with_splits), len(self._actions), hidden)
+        # (value, soft, upcard, action) -> training experience count; filled by the trainer
+        # (instrumentation: lets us ask which action a cell was actually *tested* on).
+        self.sample_counts: dict = {}
 
     @property
     def actions(self) -> tuple[Action, ...]:

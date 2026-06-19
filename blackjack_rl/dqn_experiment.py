@@ -28,6 +28,7 @@ from blackjack_rl.evaluation.policy_diff import DiffReport
 from blackjack_rl.persistence import save_run
 from blackjack_rl.schedules import KINDS
 from blackjack_rl.training.deep_q import train_dqn
+from blackjack_rl.training.exploring_starts_dqn import train_dqn_es
 from blackjack_rl.util import format_duration
 
 DEFAULT_RUNS_DIR = Path(__file__).resolve().parent.parent / "runs"
@@ -80,7 +81,9 @@ def run_dqn(
 
     started = datetime.now().astimezone()
     t0 = time.perf_counter()
-    if config.epsilon_schedule == "constant":
+    if config.exploring_starts:
+        explore = "exploring-starts (greedy follow, no epsilon)"
+    elif config.epsilon_schedule == "constant":
         explore = f"epsilon {config.epsilon}"
     else:
         explore = f"epsilon {config.epsilon_schedule} {config.epsilon_start}->{config.epsilon_end}"
@@ -89,7 +92,8 @@ def run_dqn(
         f"(seed {config.seed}, {explore}, lr {config.lr}) ..."
     )
     learning_curve: list[dict] = []
-    agent = train_dqn(config, progress_every=progress_every, on_checkpoint=learning_curve.append)
+    trainer = train_dqn_es if config.exploring_starts else train_dqn
+    agent = trainer(config, progress_every=progress_every, on_checkpoint=learning_curve.append)
     train_seconds = time.perf_counter() - t0
     log(f"  training done in {format_duration(train_seconds)}")
 
@@ -130,6 +134,11 @@ def run_dqn(
                 "category_counts": report.category_counts,
                 "cells": [asdict(cell) for cell in report.cells],
             },
+            "sample_counts": [
+                {"player_value": k[0], "is_soft": k[1], "dealer_upcard": k[2],
+                 "action": k[3], "count": v}
+                for k, v in getattr(agent, "sample_counts", {}).items()
+            ],
             "learning_curve": learning_curve,
         }
         target = runs_dir if runs_dir is not None else DEFAULT_RUNS_DIR
@@ -203,6 +212,7 @@ def main() -> None:
     parser.add_argument("--target-sync", type=int, default=1_000, help="hard-sync target every N steps")
     parser.add_argument("--double-dqn", action="store_true", help="use Double-DQN targets (curb overestimation)")
     parser.add_argument("--encoding", choices=("scalar", "onehot"), default="scalar", help="input encoding for total+upcard")
+    parser.add_argument("--exploring-starts", action="store_true", help="force (state,action) coverage (the DQN capstone)")
     parser.add_argument("--with-splits", action="store_true", help="enable split action + pair state")
     parser.add_argument("--eval-hands", type=int, default=200_000, help="hands for edge eval")
     parser.add_argument("--eval-seed", type=int, default=0, help="eval RNG seed")
@@ -230,6 +240,7 @@ def main() -> None:
         target_sync_every=args.target_sync,
         double_dqn=args.double_dqn,
         encoding=args.encoding,
+        exploring_starts=args.exploring_starts,
         with_splits=args.with_splits,
         seed=args.seed,
     )

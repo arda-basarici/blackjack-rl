@@ -88,6 +88,8 @@ class DQNConfig:
                         the target net) to curb the max-overestimation bias. Off = vanilla DQN.
     encoding          : input encoding — "scalar" (smooth/ordered prior) or "onehot" (total + upcard
                         as categories, sharp where blackjack is sharp). See CONCEPTS §21.
+    exploring_starts  : train with forced (state, action) starts (uniform coverage, greedy follow,
+                        epsilon ignored) instead of natural epsilon-greedy play. The DQN capstone.
     with_splits       : enable the split action + pair-aware state (A11); off = no-split A.
     seed              : seed for both RNGs (random for engine/replay, torch for weights).
     """
@@ -108,6 +110,7 @@ class DQNConfig:
     target_sync_every: int = 1_000
     double_dqn: bool = False
     encoding: str = "scalar"
+    exploring_starts: bool = False
     with_splits: bool = False
     seed: int = 42
 

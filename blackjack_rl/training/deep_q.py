@@ -21,7 +21,7 @@ from typing import Callable
 import torch
 from torch.nn import functional as F
 
-from simulator.game_state import Action
+from simulator.game_state import Action, GameState
 
 from blackjack_rl.agents.dqn import DQNAgent, QNetwork, encode_features
 from blackjack_rl.config import DQNConfig
@@ -156,6 +156,34 @@ def td_update(
     return float(loss.item())
 
 
+# --- instrumentation: probe-cell Q trajectories ------------------------------
+
+# A handful of cells to watch the Q-values of over training (the over-double headline cells plus
+# the famous near-tie). Lets us see *how* the wrong policy forms — when greedy flips, whether
+# Q(double) spikes late or is inflated from the start.
+PROBE_CELLS: tuple[tuple[int, bool, int], ...] = (
+    (20, True, 8), (19, True, 6), (16, True, 4), (13, True, 5), (16, False, 10),
+)
+
+
+def _probe_state(value: int, is_soft: bool, upcard: int) -> GameState:
+    return GameState(
+        player_value=value, player_is_soft=is_soft, player_card_count=2, dealer_upcard=upcard,
+        can_hit=True, can_stand=True, can_double=True, can_split=False, can_surrender=False,
+    )
+
+
+def probe_q_values(agent: DQNAgent, cells: tuple[tuple[int, bool, int], ...] = PROBE_CELLS) -> dict:
+    """For each probe cell, the net's current Q for every action — a checkpoint snapshot of the
+    value trajectory that drives the policy."""
+    out: dict[str, dict] = {}
+    for value, is_soft, upcard in cells:
+        q = agent.q_values(_probe_state(value, is_soft, upcard))
+        label = f"{'soft' if is_soft else 'hard'}{value}_v{upcard}"
+        out[label] = {a: round(float(q[i]), 3) for i, a in enumerate(agent.actions)}
+    return out
+
+
 # --- the training loop (deep Q-learning over Problem A hands) -----------------
 
 def train_dqn(
@@ -199,10 +227,14 @@ def train_dqn(
     env_steps = 0  # decisions collected (the replay-ratio clock)
     grad_steps = 0
     loss_sum, loss_count = 0.0, 0  # accumulated since the last checkpoint
+    counts: dict = {}  # (value, soft, upcard, action) -> experience count
 
     for i in range(total):
         agent.epsilon = epsilon_at(i)
         hand = capture_hand(agent, env_config)
+        for s in hand.steps:
+            kc = (s.player_value, s.player_is_soft, s.dealer_upcard, s.action)
+            counts[kc] = counts.get(kc, 0) + 1
         for transition in hand_to_transitions(hand, agent.actions, config.with_splits, config.encoding):
             buffer.push(transition)
             env_steps += 1
@@ -242,7 +274,9 @@ def train_dqn(
                         "buffer": len(buffer),
                         "recent_loss": round(avg_loss, 5) if loss_count else None,
                         "agreement": round(agreement, 4),
+                        "probe_q": probe_q_values(agent),
                     }
                 )
             loss_sum, loss_count = 0.0, 0
+    agent.sample_counts = counts
     return agent
