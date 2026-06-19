@@ -210,6 +210,7 @@ def main() -> None:
     parser.add_argument("--updates-per-step", type=int, default=1, help="gradient steps per training event")
     parser.add_argument("--train-every", type=int, default=4, help="train only every N decisions (replay ratio; 1 = every step)")
     parser.add_argument("--target-sync", type=int, default=1_000, help="hard-sync target every N steps")
+    parser.add_argument("--target-tau", type=float, default=0.0, help="soft/Polyak target update each step (0 = hard sync)")
     parser.add_argument("--double-dqn", action="store_true", help="use Double-DQN targets (curb overestimation)")
     parser.add_argument("--encoding", choices=("scalar", "onehot"), default="scalar", help="input encoding for total+upcard")
     parser.add_argument("--exploring-starts", action="store_true", help="force (state,action) coverage (the DQN capstone)")
@@ -240,6 +241,7 @@ def main() -> None:
         updates_per_step=args.updates_per_step,
         train_every=args.train_every,
         target_sync_every=args.target_sync,
+        target_tau=args.target_tau,
         double_dqn=args.double_dqn,
         encoding=args.encoding,
         exploring_starts=args.exploring_starts,

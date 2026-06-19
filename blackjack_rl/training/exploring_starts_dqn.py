@@ -35,6 +35,7 @@ from blackjack_rl.training.deep_q import (
     hand_to_transitions,
     make_target,
     probe_q_values,
+    soft_update,
     sync_target,
     td_update,
 )
@@ -133,7 +134,9 @@ def train_dqn_es(
                         loss_sum += loss
                         loss_count += 1
                         grad_steps += 1
-                        if grad_steps % config.target_sync_every == 0:
+                        if config.target_tau > 0:
+                            soft_update(target, agent.q_net, config.target_tau)
+                        elif grad_steps % config.target_sync_every == 0:
                             sync_target(target, agent.q_net)
 
         if progress_every and (i + 1) % progress_every == 0:

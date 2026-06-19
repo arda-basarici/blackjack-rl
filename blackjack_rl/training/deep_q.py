@@ -49,6 +49,17 @@ def sync_target(target: QNetwork, online: QNetwork) -> None:
     target.load_state_dict(online.state_dict())
 
 
+def soft_update(target: QNetwork, online: QNetwork, tau: float) -> None:
+    """Polyak / soft target update — nudge the (frozen) target a fraction ``tau`` toward the online
+    net *every* step: ``theta_target = (1-tau)*theta_target + tau*theta_online``. The target becomes
+    a slow EMA of the online weights, so the bootstrap target it produces is smoothed *during*
+    training (a softer alternative to the periodic hard sync; stabilizes the dynamics at the source,
+    not just the final readout). The target stays frozen for gradients."""
+    with torch.no_grad():
+        for tp, op in zip(target.parameters(), online.parameters()):
+            tp.mul_(1.0 - tau).add_(op, alpha=tau)
+
+
 # --- transition reconstruction (episode -> TD transitions) -------------------
 
 def _legal_mask(step: Step, actions: Sequence[Action]) -> torch.Tensor:
@@ -262,7 +273,9 @@ def train_dqn(
                     loss_sum += loss
                     loss_count += 1
                     grad_steps += 1
-                    if grad_steps % config.target_sync_every == 0:
+                    if config.target_tau > 0:
+                        soft_update(target, agent.q_net, config.target_tau)
+                    elif grad_steps % config.target_sync_every == 0:
                         sync_target(target, agent.q_net)
 
         if progress_every and (i + 1) % progress_every == 0:

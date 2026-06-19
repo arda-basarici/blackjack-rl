@@ -84,6 +84,10 @@ class DQNConfig:
     train_every       : fire a training event only every this many decisions (the replay ratio;
                         4 = DeepMind's DQN — fewer, less-redundant updates, much faster than 1).
     target_sync_every : hard-sync the target network every this many gradient steps.
+    target_tau        : if > 0, soft/Polyak target update each step instead of the hard sync — the
+                        target becomes a slow EMA of the online net, smoothing the bootstrap target
+                        *during* training (stabilizes the learning dynamics, not just the readout).
+                        0 = hard sync (default). Typical: 0.005-0.01.
     double_dqn        : Double-DQN targets (select next action with the online net, evaluate with
                         the target net) to curb the max-overestimation bias. Off = vanilla DQN.
     encoding          : input encoding — "scalar" (smooth/ordered prior) or "onehot" (total + upcard
@@ -114,6 +118,7 @@ class DQNConfig:
     updates_per_step: int = 1
     train_every: int = 4
     target_sync_every: int = 1_000
+    target_tau: float = 0.0
     double_dqn: bool = False
     encoding: str = "scalar"
     exploring_starts: bool = False
@@ -154,3 +159,5 @@ class DQNConfig:
             raise ValueError("hidden must have at least one layer")
         if self.encoding not in ("scalar", "onehot"):
             raise ValueError(f"encoding must be 'scalar' or 'onehot', got {self.encoding!r}")
+        if not 0.0 <= self.target_tau < 1.0:
+            raise ValueError(f"target_tau must be in [0, 1), got {self.target_tau}")
