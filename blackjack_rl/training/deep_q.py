@@ -27,7 +27,7 @@ from blackjack_rl.agents.dqn import DQNAgent, QNetwork, encode_features
 from blackjack_rl.config import DQNConfig
 from blackjack_rl.env import CapturedHand, Step, capture_hand, problem_a_config
 from blackjack_rl.evaluation.network_diff import diff_network, enumerate_cells
-from blackjack_rl.schedules import make_epsilon_schedule
+from blackjack_rl.schedules import make_schedule
 from blackjack_rl.training.replay import Batch, ReplayBuffer, Transition
 from blackjack_rl.util import format_duration
 
@@ -238,11 +238,21 @@ def train_dqn(
     optimizer = torch.optim.Adam(agent.q_net.parameters(), lr=config.lr)
     buffer = ReplayBuffer(capacity=config.buffer_capacity)
     env_config = problem_a_config()
-    epsilon_at = make_epsilon_schedule(
+    epsilon_at = make_schedule(
         config.epsilon_schedule,
         constant=config.epsilon,
         start=config.epsilon_start,
         end=config.epsilon_end,
+        num_episodes=config.num_episodes,
+    )
+    # Learning-rate schedule: constant by default (original behavior). A decaying step lets the
+    # estimate converge to a point instead of swinging in a fixed band under constant gain — the
+    # tabular agent's 1/n step, ported to the net (CONCEPTS §26). lr is the start, lr_end the end.
+    lr_at = make_schedule(
+        config.lr_schedule,
+        constant=config.lr,
+        start=config.lr,
+        end=config.lr_end,
         num_episodes=config.num_episodes,
     )
 
@@ -256,6 +266,8 @@ def train_dqn(
 
     for i in range(total):
         agent.epsilon = epsilon_at(i)
+        for group in optimizer.param_groups:  # anneal the step size (no-op for a constant schedule)
+            group["lr"] = lr_at(i)
         hand = capture_hand(agent, env_config)
         for s in hand.steps:
             kc = (s.player_value, s.player_is_soft, s.dealer_upcard, s.action)
@@ -297,13 +309,14 @@ def train_dqn(
             print(
                 f"  {done:,}/{total:,} ({done / total:.0%})  elapsed {format_duration(elapsed)}  "
                 f"{rate:,.0f} hands/s  eta {format_duration(eta)}  eps {agent.epsilon:.3f}  "
-                f"grad_steps {grad_steps:,}  loss {avg_loss:.4f}  agree {agreement:.1%}",
+                f"lr {lr_at(i):.2e}  grad_steps {grad_steps:,}  loss {avg_loss:.4f}  agree {agreement:.1%}",
                 file=sys.stderr,
             )
             if on_checkpoint is not None:
                 cp = {
                     "episode": done,
                     "epsilon": round(agent.epsilon, 4),
+                    "lr": round(lr_at(i), 8),
                     "grad_steps": grad_steps,
                     "buffer": len(buffer),
                     "recent_loss": round(avg_loss, 5) if loss_count else None,

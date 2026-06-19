@@ -75,7 +75,13 @@ class DQNConfig:
     num_episodes      : number of hands to train on.
     epsilon[_*]       : exploration rate / decaying schedule (reuses schedules.py).
     hidden            : QNetwork hidden-layer sizes.
-    lr                : Adam learning rate.
+    lr                : Adam learning rate. With a decaying ``lr_schedule`` this is the *start* rate.
+    lr_schedule       : "constant" | "linear" | "exponential" | "harmonic" (reuses schedules.py).
+                        A decaying step size lets the estimate converge to a point instead of
+                        oscillating in a fixed band under constant gain — the tabular agent's ``1/n``
+                        step, ported to the net (CONCEPTS §26). "constant" = the original behavior.
+    lr_end            : end learning rate for a decaying schedule (reached at the final episode;
+                        must be > 0 for harmonic/exponential). Ignored when lr_schedule="constant".
     gamma             : TD discount (1.0 for Problem A — reward is terminal-only).
     batch_size        : replay minibatch size.
     buffer_capacity   : replay ring-buffer size.
@@ -111,6 +117,8 @@ class DQNConfig:
     epsilon_end: float = 0.0
     hidden: tuple[int, ...] = (64, 64)
     lr: float = 1e-3
+    lr_schedule: str = "constant"
+    lr_end: float = 1e-5
     gamma: float = 1.0
     batch_size: int = 128
     buffer_capacity: int = 50_000
@@ -141,6 +149,10 @@ class DQNConfig:
                 raise ValueError(f"{name} must be in [0, 1], got {value}")
         if self.lr <= 0.0:
             raise ValueError(f"lr must be > 0, got {self.lr}")
+        if self.lr_schedule not in KINDS:
+            raise ValueError(f"lr_schedule must be one of {KINDS}, got {self.lr_schedule!r}")
+        if self.lr_schedule in ("exponential", "harmonic") and self.lr_end <= 0.0:
+            raise ValueError(f"lr_end must be > 0 for a {self.lr_schedule} schedule, got {self.lr_end}")
         if not 0.0 <= self.gamma <= 1.0:
             raise ValueError(f"gamma must be in [0, 1], got {self.gamma}")
         for name, value in (

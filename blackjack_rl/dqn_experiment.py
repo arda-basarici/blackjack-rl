@@ -87,9 +87,13 @@ def run_dqn(
         explore = f"epsilon {config.epsilon}"
     else:
         explore = f"epsilon {config.epsilon_schedule} {config.epsilon_start}->{config.epsilon_end}"
+    lr_desc = (
+        f"lr {config.lr}" if config.lr_schedule == "constant"
+        else f"lr {config.lr_schedule} {config.lr}->{config.lr_end}"
+    )
     log(
         f"[{started:%Y-%m-%d %H:%M:%S}] training {config.num_episodes:,} episodes "
-        f"(seed {config.seed}, {explore}, lr {config.lr}) ..."
+        f"(seed {config.seed}, {explore}, {lr_desc}) ..."
     )
     learning_curve: list[dict] = []
     trainer = train_dqn_es if config.exploring_starts else train_dqn
@@ -201,7 +205,9 @@ def main() -> None:
     parser.add_argument("--epsilon-schedule", choices=KINDS, default="linear", help="exploration schedule")
     parser.add_argument("--epsilon-start", type=float, default=0.3, help="start rate (decaying schedule)")
     parser.add_argument("--epsilon-end", type=float, default=0.0, help="end rate (decaying schedule)")
-    parser.add_argument("--lr", type=float, default=1e-3, help="Adam learning rate")
+    parser.add_argument("--lr", type=float, default=1e-3, help="Adam learning rate (start rate if lr decays)")
+    parser.add_argument("--lr-schedule", choices=KINDS, default="constant", help="learning-rate schedule (decay lets the estimate converge; constant = original)")
+    parser.add_argument("--lr-end", type=float, default=1e-5, help="end learning rate for a decaying schedule (>0 for harmonic/exponential)")
     parser.add_argument("--gamma", type=float, default=1.0, help="TD discount (1.0 for Problem A)")
     parser.add_argument("--hidden", type=str, default="64,64", help="hidden layer sizes, comma-separated")
     parser.add_argument("--batch-size", type=int, default=128, help="replay minibatch size")
@@ -233,6 +239,8 @@ def main() -> None:
         epsilon_start=args.epsilon_start,
         epsilon_end=args.epsilon_end,
         lr=args.lr,
+        lr_schedule=args.lr_schedule,
+        lr_end=args.lr_end,
         gamma=args.gamma,
         hidden=_parse_hidden(args.hidden),
         batch_size=args.batch_size,

@@ -30,6 +30,7 @@ from blackjack_rl.agents.dqn import DQNAgent
 from blackjack_rl.config import DQNConfig
 from blackjack_rl.env import CapturedHand, Step, problem_a_config
 from blackjack_rl.evaluation.network_diff import diff_network
+from blackjack_rl.schedules import make_schedule
 from blackjack_rl.training.deep_q import (
     full_q_grid,
     hand_to_transitions,
@@ -104,6 +105,15 @@ def train_dqn_es(
     start_pairs = enumerate_start_pairs(config.with_splits)
     if not start_pairs:
         raise RuntimeError("no start pairs enumerated")
+    # Learning-rate schedule (constant by default): a decaying step lets the estimate converge to a
+    # point rather than oscillate under constant gain — the tabular 1/n step ported to the net (§26).
+    lr_at = make_schedule(
+        config.lr_schedule,
+        constant=config.lr,
+        start=config.lr,
+        end=config.lr_end,
+        num_episodes=config.num_episodes,
+    )
 
     total = config.num_episodes
     start = time.perf_counter()
@@ -113,6 +123,8 @@ def train_dqn_es(
     swa_sum, swa_n = None, 0  # Stochastic Weight Averaging accumulator (back half of training)
 
     for i in range(total):
+        for group in optimizer.param_groups:  # anneal the step size (no-op for a constant schedule)
+            group["lr"] = lr_at(i)
         spec, action = random.choice(start_pairs)
         hand = es_capture(agent, spec, action, env_config)
         if hand is not None:
@@ -156,14 +168,15 @@ def train_dqn_es(
             agreement = diff_network(agent).agreement_unweighted
             print(
                 f"  {done:,}/{total:,} ({done / total:.0%})  elapsed {format_duration(elapsed)}  "
-                f"{rate:,.0f} hands/s  eta {format_duration(eta)}  grad_steps {grad_steps:,}  "
-                f"loss {avg_loss:.4f}  agree {agreement:.1%}",
+                f"{rate:,.0f} hands/s  eta {format_duration(eta)}  lr {lr_at(i):.2e}  "
+                f"grad_steps {grad_steps:,}  loss {avg_loss:.4f}  agree {agreement:.1%}",
                 file=sys.stderr,
             )
             if on_checkpoint is not None:
                 cp = {
                     "episode": done,
                     "epsilon": 0.0,
+                    "lr": round(lr_at(i), 8),
                     "grad_steps": grad_steps,
                     "buffer": len(buffer),
                     "recent_loss": round(avg_loss, 5) if loss_count else None,

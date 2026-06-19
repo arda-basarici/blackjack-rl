@@ -1,22 +1,24 @@
-"""Epsilon schedules for exploration — constant or decaying (toward GLIE).
+"""Value schedules over training — constant or decaying (toward GLIE / convergence).
 
-A schedule maps an episode index (0 .. num_episodes-1) to an exploration rate. Decaying
-schedules let us explore hard early (sample rare actions like soft doubles) and anneal toward
-~0 late (so the final Q-values reflect near-optimal continuations, keeping the common stiff
-hands correct). All decay schedules reach ``end`` exactly at the final episode. See A8.
+A schedule maps an episode index (0 .. num_episodes-1) to a value. Originally for *exploration*
+(epsilon: explore hard early to sample rare actions, anneal toward ~0 late), the same machinery now
+also drives the DQN *learning rate* (a decaying step size lets the value estimate converge to a
+point, mimicking the tabular agent's ``1/n`` step — see CONCEPTS §26). All decay schedules reach
+``end`` exactly at the final episode. See A8.
 """
 from __future__ import annotations
 
 from typing import Callable
 
-EpsilonSchedule = Callable[[int], float]
+Schedule = Callable[[int], float]
+EpsilonSchedule = Schedule  # back-compat alias (schedules are generic; epsilon was the first user)
 KINDS: tuple[str, ...] = ("constant", "linear", "exponential", "harmonic")
 
 
-def make_epsilon_schedule(
+def make_schedule(
     kind: str, *, constant: float, start: float, end: float, num_episodes: int
-) -> EpsilonSchedule:
-    """Build an epsilon(episode_index) function.
+) -> Schedule:
+    """Build a value(episode_index) schedule function.
 
     constant     : fixed at ``constant``.
     linear       : start -> end, straight line (can reach 0).
@@ -39,3 +41,8 @@ def make_epsilon_schedule(
         c = start / end - 1.0
         return lambda i: start / (1.0 + c * (i / last))
     raise ValueError(f"unknown schedule {kind!r}; expected one of {KINDS}")
+
+
+# Back-compat alias: the schedule machinery is generic (it also drives the DQN learning rate).
+# ``make_epsilon_schedule`` was the original name from when epsilon was its only consumer.
+make_epsilon_schedule = make_schedule
