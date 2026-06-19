@@ -241,6 +241,7 @@ def train_dqn(
     grad_steps = 0
     loss_sum, loss_count = 0.0, 0  # accumulated since the last checkpoint
     counts: dict = {}  # (value, soft, upcard, action) -> experience count
+    swa_sum, swa_n = None, 0  # Stochastic Weight Averaging accumulator (back half of training)
 
     for i in range(total):
         agent.epsilon = epsilon_at(i)
@@ -266,6 +267,14 @@ def train_dqn(
 
         if progress_every and (i + 1) % progress_every == 0:
             done = i + 1
+            if config.swa and done >= total // 2:  # accumulate weights over the back half
+                sd = agent.q_net.state_dict()
+                if swa_sum is None:
+                    swa_sum = {k: v.detach().clone() for k, v in sd.items()}
+                else:
+                    for k, v in sd.items():
+                        swa_sum[k] += v.detach()
+                swa_n += 1
             elapsed = time.perf_counter() - start
             rate = done / elapsed if elapsed else 0.0
             eta = (total - done) / rate if rate else 0.0
@@ -292,5 +301,7 @@ def train_dqn(
                     cp["q_grid"] = full_q_grid(agent)
                 on_checkpoint(cp)
             loss_sum, loss_count = 0.0, 0
+    if config.swa and swa_n:  # evaluate the time-averaged weights, not the final snapshot
+        agent.q_net.load_state_dict({k: v / swa_n for k, v in swa_sum.items()})
     agent.sample_counts = counts
     return agent

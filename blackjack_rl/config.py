@@ -92,6 +92,10 @@ class DQNConfig:
                         epsilon ignored) instead of natural epsilon-greedy play. The DQN capstone.
     log_q_grid        : at each checkpoint, log Q for every action at every cell (all 240) so we
                         can plot per-cell Q-trajectories. Off by default (keeps records small).
+    swa               : Stochastic Weight Averaging — average the network weights over the back half
+                        of training (snapshotting at each checkpoint) and evaluate the averaged net.
+                        Cancels the high-variance-action oscillation by averaging it out. Needs
+                        progress_every set (it snapshots at checkpoints).
     with_splits       : enable the split action + pair-aware state (A11); off = no-split A.
     seed              : seed for both RNGs (random for engine/replay, torch for weights).
     """
@@ -114,6 +118,7 @@ class DQNConfig:
     encoding: str = "scalar"
     exploring_starts: bool = False
     log_q_grid: bool = False
+    swa: bool = False
     with_splits: bool = False
     seed: int = 42
 
