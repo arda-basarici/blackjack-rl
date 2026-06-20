@@ -229,7 +229,7 @@ def main() -> None:
     parser.add_argument("--double-after", type=int, default=0, help="curriculum: train hit/stand only until this episode, then enable double (0 = off)")
     parser.add_argument("--reward-baseline", choices=("none", "bust", "stand"), default="none", help="dealer control variate on the terminal reward (strips dealer variance; EV/policy unchanged)")
     parser.add_argument("--baseline-c", type=float, default=1.0, help="coefficient for the 'bust' reward baseline")
-    parser.add_argument("--encoding", choices=("scalar", "onehot"), default="scalar", help="input encoding for total+upcard")
+    parser.add_argument("--encoding", choices=("scalar", "onehot", "thermometer"), default="scalar", help="input encoding for total+upcard")
     parser.add_argument("--exploring-starts", action="store_true", help="force (state,action) coverage (the DQN capstone)")
     parser.add_argument("--log-q-grid", action="store_true", help="log full per-cell Q each checkpoint (for trajectory plots)")
     parser.add_argument("--swa", action="store_true", help="Stochastic Weight Averaging over the back half (averages out the oscillation)")

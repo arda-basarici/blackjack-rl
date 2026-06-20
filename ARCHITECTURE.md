@@ -167,6 +167,31 @@ in the notebook: the edge claim rests on the 1M re-eval (not the noisy 200k figu
 ES forces *2-card* starts, so a few thin deep / post-split states (the `under_visited` cells) aren't
 seeded — coverage is near-uniform over decision *starts*, not literally every reachable state.
 
+### A13 — DQN stabilization knobs are flag-gated and default-off (the investigation toolkit)
+
+The Stage-5 investigation added several DQN knobs, all on `DQNConfig` with defaults that reproduce
+prior runs exactly, each behind a CLI flag so experiments are one-liners and the default path is
+unchanged:
+
+- **`lr_schedule` / `lr_end`** (`--lr-schedule`) — decaying learning rate, reusing the (generalized)
+  `schedules` module. The lever that *settles* the high-variance terminal action (the tabular `1/n`
+  step, ported to the net). Constant is the default. (CONCEPTS §26.)
+- **`target_tau`** (`--target-tau`) — soft/Polyak target instead of hard sync. (CONCEPTS §25.)
+- **`swa`** (`--swa`) — Stochastic Weight Averaging (readout). Pairs with *constant* lr. (§25.)
+- **`double_after`** (`--double-after`) — curriculum: hit/stand first, then enable `double` (gated in
+  selection *and* the bootstrap max). Decontaminates the base; doesn't beat the variance floor.
+- **`reward_baseline` / `baseline_c`** (`--reward-baseline`) — dealer control variate on the terminal
+  reward (`bust`/`stand`), in `evaluation/dealer_baseline.py`. Unbiased + leak-free, but cancels only
+  the dealer-explained variance — a *negative* result for the double, which is draw-dominated.
+  (CONCEPTS §28; REPORT_NOTES.)
+- **`num_threads`** (`--threads`, 0 = all cores) and **`device`** (`--device cpu|cuda|auto`).
+  Multi-thread gives a modest speedup on the tiny net; **GPU does not help Problem A** — the bottleneck
+  is the sequential Python env loop, so GPU sits at ~0% (confirmed empirically). Both are kept for
+  Problem B's larger nets / a vectorized env.
+
+Also: trained weights now persist (`model.pt` beside `record.json`) so a run is re-loadable for
+representation analysis without retraining (`evaluation/embedding.py`), partly lifting A7 for the net.
+
 ## Module map (current)
 
 - `blackjack_rl/state.py` — `encode_state`, `StateKey`

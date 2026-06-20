@@ -214,7 +214,7 @@ class DQNConfig:
             raise ValueError("batch_size cannot exceed buffer_capacity")
         if not self.hidden:
             raise ValueError("hidden must have at least one layer")
-        if self.encoding not in ("scalar", "onehot"):
-            raise ValueError(f"encoding must be 'scalar' or 'onehot', got {self.encoding!r}")
+        if self.encoding not in ("scalar", "onehot", "thermometer"):
+            raise ValueError(f"encoding must be 'scalar', 'onehot', or 'thermometer', got {self.encoding!r}")
         if not 0.0 <= self.target_tau < 1.0:
             raise ValueError(f"target_tau must be in [0, 1), got {self.target_tau}")

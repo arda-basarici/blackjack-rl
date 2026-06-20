@@ -42,14 +42,14 @@ _NEG_INF = float("-inf")
 # One-hot bin ranges: player totals 4..21 (18 bins), dealer upcards 2..11 (10 bins, 11 = ace).
 _TOTAL_LO, _TOTAL_HI = 4, 21
 _UPCARD_LO, _UPCARD_HI = 2, 11
-ENCODINGS: tuple[str, ...] = ("scalar", "onehot")
+ENCODINGS: tuple[str, ...] = ("scalar", "onehot", "thermometer")
 
 
 def feature_dim(encoding: str = "scalar", with_splits: bool = False) -> int:
     """Input width for ``encoding`` — so the agent and network agree without hardcoding."""
     if encoding == "scalar":
         base = 3
-    elif encoding == "onehot":
+    elif encoding in ("onehot", "thermometer"):  # same width — one input per value/threshold
         base = (_TOTAL_HI - _TOTAL_LO + 1) + 1 + (_UPCARD_HI - _UPCARD_LO + 1)  # total + soft + upcard
     else:
         raise ValueError(f"unknown encoding {encoding!r}; expected one of {ENCODINGS}")
@@ -61,6 +61,14 @@ def _onehot(value: int, lo: int, hi: int) -> list[float]:
     vec = [0.0] * (hi - lo + 1)
     vec[min(max(value, lo), hi) - lo] = 1.0
     return vec
+
+
+def _thermometer(value: int, lo: int, hi: int) -> list[float]:
+    """Cumulative (unary) block over [lo, hi]: index i is 1.0 iff value >= lo + i. Clamped.
+    Between scalar and one-hot: ordered (neighbours share most bits -> generalizes) but with a
+    per-threshold input (can be sharp at a given boundary)."""
+    v = min(max(value, lo), hi)
+    return [1.0 if v >= lo + i else 0.0 for i in range(hi - lo + 1)]
 
 
 def encode_features(
@@ -88,6 +96,10 @@ def encode_features(
         feats = _onehot(state.player_value, _TOTAL_LO, _TOTAL_HI)
         feats.append(float(state.player_is_soft))
         feats += _onehot(state.dealer_upcard, _UPCARD_LO, _UPCARD_HI)
+    elif encoding == "thermometer":
+        feats = _thermometer(state.player_value, _TOTAL_LO, _TOTAL_HI)
+        feats.append(float(state.player_is_soft))
+        feats += _thermometer(state.dealer_upcard, _UPCARD_LO, _UPCARD_HI)
     else:
         raise ValueError(f"unknown encoding {encoding!r}; expected one of {ENCODINGS}")
     if with_splits:
