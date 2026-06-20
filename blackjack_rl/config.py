@@ -113,6 +113,9 @@ class DQNConfig:
                         best for tiny nets where dispatch overhead dominates). 0 = all cores. >1
                         speeds up large nets (256+ hidden, big batches) but parallel float-reduction
                         order means runs may not be bit-identical across machines.
+    device            : "cpu" (default), "cuda", or "auto" (cuda if available). For this tiny net +
+                        sequential single-hand env loop, GPU isn't faster per run; its value is as a
+                        parallel compute lane (a GPU run alongside CPU runs frees the CPU).
     """
 
     num_episodes: int
@@ -140,16 +143,28 @@ class DQNConfig:
     with_splits: bool = False
     seed: int = 42
     num_threads: int = 1
+    device: str = "cpu"
 
     def torch_threads(self) -> int:
         """Resolve ``num_threads`` to a concrete count: 0 means all available cores."""
         return self.num_threads if self.num_threads > 0 else (os.cpu_count() or 1)
+
+    def resolve_device(self) -> str:
+        """Resolve ``device``: 'auto' -> cuda if available else cpu; 'cuda' errors if none present."""
+        import torch
+        if self.device == "auto":
+            return "cuda" if torch.cuda.is_available() else "cpu"
+        if self.device == "cuda" and not torch.cuda.is_available():
+            raise RuntimeError("device='cuda' requested but no CUDA GPU is available")
+        return self.device
 
     def __post_init__(self) -> None:
         if self.num_episodes < 1:
             raise ValueError(f"num_episodes must be >= 1, got {self.num_episodes}")
         if self.num_threads < 0:
             raise ValueError(f"num_threads must be >= 0 (0 = all cores), got {self.num_threads}")
+        if self.device not in ("cpu", "cuda", "auto"):
+            raise ValueError(f"device must be 'cpu', 'cuda', or 'auto', got {self.device!r}")
         if self.epsilon_schedule not in KINDS:
             raise ValueError(f"epsilon_schedule must be one of {KINDS}, got {self.epsilon_schedule!r}")
         for name, value in (

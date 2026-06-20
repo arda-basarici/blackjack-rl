@@ -48,6 +48,18 @@ class Batch:
     dones: torch.Tensor             # [B]          bool
     next_legal_masks: torch.Tensor  # [B, n_actions] bool
 
+    def to(self, device) -> "Batch":
+        """Return a copy with every tensor moved to ``device`` (the buffer stays on CPU; only the
+        sampled minibatch is moved per gradient step, which is the standard DQN pattern)."""
+        return Batch(
+            states=self.states.to(device),
+            actions=self.actions.to(device),
+            rewards=self.rewards.to(device),
+            next_states=self.next_states.to(device),
+            dones=self.dones.to(device),
+            next_legal_masks=self.next_legal_masks.to(device),
+        )
+
 
 class ReplayBuffer:
     """A fixed-capacity ring buffer of ``Transition``s with uniform random sampling.

@@ -95,7 +95,7 @@ def run_dqn(
     )
     log(
         f"[{started:%Y-%m-%d %H:%M:%S}] training {config.num_episodes:,} episodes "
-        f"(seed {config.seed}, {explore}, {lr_desc}) ..."
+        f"(seed {config.seed}, {explore}, {lr_desc}, device {config.resolve_device()}) ..."
     )
     learning_curve: list[dict] = []
     trainer = train_dqn_es if config.exploring_starts else train_dqn
@@ -208,6 +208,7 @@ def main() -> None:
     parser.add_argument("--episodes", type=int, default=2_000_000, help="training hands")
     parser.add_argument("--seed", type=int, default=42, help="training RNG seed (random + torch)")
     parser.add_argument("--threads", type=int, default=1, help="torch CPU threads (1 = single/reproducible, 0 = all cores)")
+    parser.add_argument("--device", choices=("cpu", "cuda", "auto"), default="cpu", help="compute device (cuda mainly as a parallel lane; not faster per-run here)")
     parser.add_argument("--epsilon", type=float, default=0.1, help="exploration rate (constant schedule)")
     parser.add_argument("--epsilon-schedule", choices=KINDS, default="linear", help="exploration schedule")
     parser.add_argument("--epsilon-start", type=float, default=0.3, help="start rate (decaying schedule)")
@@ -265,6 +266,7 @@ def main() -> None:
         with_splits=args.with_splits,
         seed=args.seed,
         num_threads=args.threads,
+        device=args.device,
     )
     log_file = None
     if not args.no_log:

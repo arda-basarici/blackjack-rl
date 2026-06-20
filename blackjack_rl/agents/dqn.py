@@ -179,7 +179,10 @@ class DQNAgent(Strategy):
     def q_values(self, state: GameState) -> torch.Tensor:
         """Raw Q(state, .) for every action in ``self._actions``, unmasked. Inference only
         (no grad) — the training loop calls ``self.q_net`` directly when it needs gradients."""
-        x = torch.tensor(encode_features(state, self.with_splits, self.encoding), dtype=torch.float32)
+        device = next(self.q_net.parameters()).device  # follow the net (cpu or cuda)
+        x = torch.tensor(
+            encode_features(state, self.with_splits, self.encoding), dtype=torch.float32, device=device
+        )
         with torch.no_grad():
             return self.q_net(x)
 

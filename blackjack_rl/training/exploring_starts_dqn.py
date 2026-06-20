@@ -95,10 +95,13 @@ def train_dqn_es(
     torch.manual_seed(config.seed)
     torch.set_num_threads(config.torch_threads())
 
+    device = config.resolve_device()
     agent = DQNAgent(
         epsilon=0.0, with_splits=config.with_splits, hidden=config.hidden, encoding=config.encoding
     )
+    agent.q_net.to(device)
     target = make_target(agent.q_net)
+    target.to(device)
     optimizer = torch.optim.Adam(agent.q_net.parameters(), lr=config.lr)
     buffer = ReplayBuffer(capacity=config.buffer_capacity)
     env_config = problem_a_config()

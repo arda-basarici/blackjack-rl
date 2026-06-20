@@ -158,6 +158,7 @@ def td_update(
     ``Q(s, a)`` of the taken actions and the TD target from the frozen target net. ``double`` uses
     Double-DQN targets. Returns the loss value (for the learning curve). Gradients flow only through
     the online net."""
+    batch = batch.to(next(online.parameters()).device)  # buffer is CPU; move the minibatch to the net
     q_taken = online(batch.states).gather(1, batch.actions.unsqueeze(1)).squeeze(1)  # [B]
     y = td_target(target, batch, gamma, online=online if double else None)
     loss = F.smooth_l1_loss(q_taken, y)
@@ -230,11 +231,14 @@ def train_dqn(
     # bit-reproducible; large nets / big batches benefit from more (config.num_threads, 0 = all).
     torch.set_num_threads(config.torch_threads())
 
+    device = config.resolve_device()
     agent = DQNAgent(
         epsilon=config.epsilon, with_splits=config.with_splits, hidden=config.hidden,
         encoding=config.encoding,
     )
+    agent.q_net.to(device)
     target = make_target(agent.q_net)
+    target.to(device)
     optimizer = torch.optim.Adam(agent.q_net.parameters(), lr=config.lr)
     buffer = ReplayBuffer(capacity=config.buffer_capacity)
     env_config = problem_a_config()
