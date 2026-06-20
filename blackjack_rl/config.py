@@ -108,6 +108,9 @@ class DQNConfig:
                         Cancels the high-variance-action oscillation by averaging it out. Needs
                         progress_every set (it snapshots at checkpoints).
     with_splits       : enable the split action + pair-aware state (A11); off = no-split A.
+    with_surrender    : enable the surrender action (terminal, first-action-only, -0.5 payout). Off
+                        by default; threads to the rollout/eval config and the diff so all three allow
+                        it consistently. Prep for the full action set (Problem B).
     seed              : seed for both RNGs (random for engine/replay, torch for weights).
     num_threads       : torch CPU threads for training matmuls. 1 = single-thread (bit-reproducible,
                         best for tiny nets where dispatch overhead dominates). 0 = all cores. >1
@@ -152,6 +155,7 @@ class DQNConfig:
     log_q_grid: bool = False
     swa: bool = False
     with_splits: bool = False
+    with_surrender: bool = False
     seed: int = 42
     num_threads: int = 1
     device: str = "cpu"

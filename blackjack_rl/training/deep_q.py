@@ -66,7 +66,8 @@ def soft_update(target: QNetwork, online: QNetwork, tau: float) -> None:
 def _legal_mask(step: Step, actions: Sequence[Action]) -> torch.Tensor:
     """Boolean legal-action mask aligned to ``actions``. Hit/stand are always legal at a recorded
     decision; double iff ``can_double``; split iff ``can_split`` (used only in split mode)."""
-    flags = {"hit": True, "stand": True, "double": step.can_double, "split": step.can_split}
+    flags = {"hit": True, "stand": True, "double": step.can_double, "split": step.can_split,
+             "surrender": False}  # surrender is first-action-only -> never legal as a *next* action
     return torch.tensor([flags[a] for a in actions], dtype=torch.bool)
 
 
@@ -95,10 +96,12 @@ def hand_to_transitions(
     for i, step in enumerate(hand.steps):
         state = torch.tensor(encode_features(step, with_splits, encoding), dtype=torch.float32)
         if i == last:  # terminal decision: carries the payout, no bootstrap
-            terminal_reward = hand.reward - baseline(
-                reward_baseline, start_total=step.player_value, upcard=step.dealer_upcard,
-                dealer_final=step.final_dealer_value, c=baseline_c,
-            )
+            terminal_reward = hand.reward
+            if step.action != "surrender":  # surrender: fixed -0.5, dealer never plays -> no CV
+                terminal_reward -= baseline(
+                    reward_baseline, start_total=step.player_value, upcard=step.dealer_upcard,
+                    dealer_final=step.final_dealer_value, c=baseline_c,
+                )
             transitions.append(
                 Transition(
                     state=state,
@@ -251,14 +254,14 @@ def train_dqn(
     device = config.resolve_device()
     agent = DQNAgent(
         epsilon=config.epsilon, with_splits=config.with_splits, hidden=config.hidden,
-        encoding=config.encoding,
+        encoding=config.encoding, with_surrender=config.with_surrender,
     )
     agent.q_net.to(device)
     target = make_target(agent.q_net)
     target.to(device)
     optimizer = torch.optim.Adam(agent.q_net.parameters(), lr=config.lr)
     buffer = ReplayBuffer(capacity=config.buffer_capacity)
-    env_config = problem_a_config()
+    env_config = problem_a_config(with_surrender=config.with_surrender)
     epsilon_at = make_schedule(
         config.epsilon_schedule,
         constant=config.epsilon,

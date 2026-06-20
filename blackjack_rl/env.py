@@ -54,6 +54,7 @@ class Step:
     can_double: bool
     action: Action
     final_dealer_value: int = 0  # dealer's played-out total (>21 = bust); for the reward baseline (CV)
+    can_surrender: bool = False  # surrender legal here (first 2-card action only); for the legal mask
 
 
 @dataclass
@@ -65,11 +66,13 @@ class CapturedHand:
     reward: float
 
 
-def problem_a_config() -> SimulatorConfig:
+def problem_a_config(with_surrender: bool = False) -> SimulatorConfig:
     """Rules for Problem A: the 6-deck S17 3:2 anchor config, counting OFF. A fresh shoe per
-    rollout makes hands independent and counting-free — a clean MDP."""
+    rollout makes hands independent and counting-free — a clean MDP. ``with_surrender`` enables the
+    surrender action in the engine (default off, so prior runs are unchanged)."""
     cfg = vegas_strip()
     cfg.card_counting_allowed = False
+    cfg.surrender_allowed = with_surrender
     return cfg
 
 
@@ -119,6 +122,7 @@ def capture_hand(policy: Strategy, config: SimulatorConfig | None = None) -> Cap
             can_double=r.can_double,
             action=r.action,
             final_dealer_value=r.final_dealer_value,
+            can_surrender=r.can_surrender,
         )
         for r in result.decision_records
         if r.action != "none"

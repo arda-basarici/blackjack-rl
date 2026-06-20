@@ -155,11 +155,20 @@ class DQNAgent(Strategy):
         with_splits: bool = False,
         hidden: Sequence[int] = (64, 64),
         encoding: str = "scalar",
+        with_surrender: bool = False,
     ) -> None:
         self.epsilon = epsilon
         self.with_splits = with_splits
+        self.with_surrender = with_surrender
         self.encoding = encoding
-        self._actions: tuple[Action, ...] = _SPLIT_ACTIONS if with_splits else _STAGE2_ACTIONS
+        # action set built from the flags; order preserved (hit/stand/double[/split][/surrender])
+        # so prior no-surrender runs reproduce exactly.
+        actions: list[Action] = ["hit", "stand", "double"]
+        if with_splits:
+            actions.append("split")
+        if with_surrender:
+            actions.append("surrender")
+        self._actions: tuple[Action, ...] = tuple(actions)
         self._action_index: dict[Action, int] = {a: i for i, a in enumerate(self._actions)}
         self.q_net = QNetwork(feature_dim(encoding, with_splits), len(self._actions), hidden)
         # Curriculum gate: when False, ``double`` is treated as illegal (never selected). The trainer

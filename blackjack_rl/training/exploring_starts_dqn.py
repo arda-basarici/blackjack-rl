@@ -97,7 +97,8 @@ def train_dqn_es(
 
     device = config.resolve_device()
     agent = DQNAgent(
-        epsilon=0.0, with_splits=config.with_splits, hidden=config.hidden, encoding=config.encoding
+        epsilon=0.0, with_splits=config.with_splits, hidden=config.hidden, encoding=config.encoding,
+        with_surrender=config.with_surrender,
     )
     agent.q_net.to(device)
     target = make_target(agent.q_net)

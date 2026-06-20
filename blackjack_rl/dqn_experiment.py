@@ -24,6 +24,7 @@ from strategies.basic_strategy import BasicStrategy
 
 from blackjack_rl.agents.dqn import DQNAgent
 from blackjack_rl.config import DQNConfig
+from blackjack_rl.env import problem_a_config
 from blackjack_rl.evaluation.metrics import EdgeResult, GreedyPolicy, evaluate_policy
 from blackjack_rl.evaluation.network_diff import diff_network
 from blackjack_rl.evaluation.policy_diff import DiffReport
@@ -104,10 +105,11 @@ def run_dqn(
     log(f"  training done in {format_duration(train_seconds)}")
 
     eval_start = time.perf_counter()
+    eval_cfg = problem_a_config(with_surrender=config.with_surrender)  # match training's action set
     log(f"evaluating agent over {eval_hands:,} hands ...")
-    agent_edge = evaluate_policy(GreedyPolicy(agent), n_hands=eval_hands, seed=eval_seed)
+    agent_edge = evaluate_policy(GreedyPolicy(agent), n_hands=eval_hands, seed=eval_seed, config=eval_cfg)
     log(f"evaluating basic strategy over {eval_hands:,} hands ...")
-    basic_edge = evaluate_policy(BasicStrategy(), n_hands=eval_hands, seed=eval_seed)
+    basic_edge = evaluate_policy(BasicStrategy(), n_hands=eval_hands, seed=eval_seed, config=eval_cfg)
     log("diffing learned policy vs basic strategy (cell-by-cell network interrogation) ...")
     report = diff_network(agent, ev_tol=ev_tol)
     eval_seconds = time.perf_counter() - eval_start
@@ -234,6 +236,7 @@ def main() -> None:
     parser.add_argument("--log-q-grid", action="store_true", help="log full per-cell Q each checkpoint (for trajectory plots)")
     parser.add_argument("--swa", action="store_true", help="Stochastic Weight Averaging over the back half (averages out the oscillation)")
     parser.add_argument("--with-splits", action="store_true", help="enable split action + pair state")
+    parser.add_argument("--with-surrender", action="store_true", help="enable the surrender action (terminal, -0.5)")
     parser.add_argument("--eval-hands", type=int, default=200_000, help="hands for edge eval")
     parser.add_argument("--eval-seed", type=int, default=0, help="eval RNG seed")
     parser.add_argument("--ev-tol", type=float, default=0.02, help="policy-diff EV-gap tolerance")
@@ -267,6 +270,7 @@ def main() -> None:
         log_q_grid=args.log_q_grid,
         swa=args.swa,
         with_splits=args.with_splits,
+        with_surrender=args.with_surrender,
         seed=args.seed,
         num_threads=args.threads,
         device=args.device,
