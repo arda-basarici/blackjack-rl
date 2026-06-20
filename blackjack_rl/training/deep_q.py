@@ -26,6 +26,7 @@ from simulator.game_state import Action, GameState
 from blackjack_rl.agents.dqn import DQNAgent, QNetwork, encode_features
 from blackjack_rl.config import DQNConfig
 from blackjack_rl.env import CapturedHand, Step, capture_hand, problem_a_config
+from blackjack_rl.evaluation.dealer_baseline import baseline
 from blackjack_rl.evaluation.network_diff import diff_network, enumerate_cells
 from blackjack_rl.schedules import make_schedule
 from blackjack_rl.training.replay import Batch, ReplayBuffer, Transition
@@ -70,7 +71,8 @@ def _legal_mask(step: Step, actions: Sequence[Action]) -> torch.Tensor:
 
 
 def hand_to_transitions(
-    hand: CapturedHand, actions: Sequence[Action], with_splits: bool = False, encoding: str = "scalar"
+    hand: CapturedHand, actions: Sequence[Action], with_splits: bool = False, encoding: str = "scalar",
+    reward_baseline: str = "none", baseline_c: float = 1.0,
 ) -> list[Transition]:
     """Reconstruct TD transitions from a captured **no-split** hand (a single decision chain).
 
@@ -78,6 +80,10 @@ def hand_to_transitions(
     decision (carrying the next state's legal mask, used to max over *legal* next actions in the
     TD target). The final decision gets reward = the hand payout and ``done=True`` (the next_*
     fields are unused placeholders). ``gamma = 1``, so no discount appears here.
+
+    ``reward_baseline`` ("none"|"bust"|"stand") subtracts a mean-zero, action-independent dealer
+    control variate from the *terminal* reward — strips the dealer's shared variance so high-variance
+    actions settle, without changing EV or the policy (CONCEPTS §27; see evaluation/dealer_baseline).
 
     NO-SPLIT ONLY: assumes the steps form one chain. Splitting (a tree of sub-hands) is a later
     extension that must decide how the ``split`` action's two successors form its target.
@@ -89,11 +95,15 @@ def hand_to_transitions(
     for i, step in enumerate(hand.steps):
         state = torch.tensor(encode_features(step, with_splits, encoding), dtype=torch.float32)
         if i == last:  # terminal decision: carries the payout, no bootstrap
+            terminal_reward = hand.reward - baseline(
+                reward_baseline, start_total=step.player_value, upcard=step.dealer_upcard,
+                dealer_final=step.final_dealer_value, c=baseline_c,
+            )
             transitions.append(
                 Transition(
                     state=state,
                     action=action_index[step.action],
-                    reward=hand.reward,
+                    reward=terminal_reward,
                     next_state=torch.zeros_like(state),
                     done=True,
                     next_legal_mask=torch.zeros(n, dtype=torch.bool),
@@ -289,7 +299,10 @@ def train_dqn(
         for s in hand.steps:
             kc = (s.player_value, s.player_is_soft, s.dealer_upcard, s.action)
             counts[kc] = counts.get(kc, 0) + 1
-        for transition in hand_to_transitions(hand, agent.actions, config.with_splits, config.encoding):
+        for transition in hand_to_transitions(
+            hand, agent.actions, config.with_splits, config.encoding,
+            reward_baseline=config.reward_baseline, baseline_c=config.baseline_c,
+        ):
             buffer.push(transition)
             env_steps += 1
             ready = len(buffer) >= config.warmup and buffer.can_sample(config.batch_size)

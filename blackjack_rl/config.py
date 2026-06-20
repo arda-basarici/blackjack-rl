@@ -121,6 +121,12 @@ class DQNConfig:
                         base policy is learned clean and uncontaminated by the oscillating double-Q.
                         At/after it, ``double`` is enabled and learned on the stable base. 0 (default)
                         = no curriculum (double available from the start).
+    reward_baseline   : dealer control variate subtracted from the terminal reward —
+                        "none" (default) | "bust" (coarse, bust/no-bust) | "stand" (full dealer-total
+                        via a stand reference). Mean-zero + action-independent, so EV and policy are
+                        unchanged; it strips the dealer's shared variance so high-variance actions
+                        settle (CONCEPTS §27; evaluation/dealer_baseline).
+    baseline_c        : coefficient for the "bust" baseline (ignored otherwise). 1.0 default.
     """
 
     num_episodes: int
@@ -150,6 +156,8 @@ class DQNConfig:
     num_threads: int = 1
     device: str = "cpu"
     double_after: int = 0
+    reward_baseline: str = "none"
+    baseline_c: float = 1.0
 
     def torch_threads(self) -> int:
         """Resolve ``num_threads`` to a concrete count: 0 means all available cores."""
@@ -173,6 +181,8 @@ class DQNConfig:
             raise ValueError(f"device must be 'cpu', 'cuda', or 'auto', got {self.device!r}")
         if self.double_after < 0:
             raise ValueError(f"double_after must be >= 0, got {self.double_after}")
+        if self.reward_baseline not in ("none", "bust", "stand"):
+            raise ValueError(f"reward_baseline must be 'none', 'bust', or 'stand', got {self.reward_baseline!r}")
         if self.epsilon_schedule not in KINDS:
             raise ValueError(f"epsilon_schedule must be one of {KINDS}, got {self.epsilon_schedule!r}")
         for name, value in (

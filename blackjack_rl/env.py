@@ -53,6 +53,7 @@ class Step:
     can_split: bool
     can_double: bool
     action: Action
+    final_dealer_value: int = 0  # dealer's played-out total (>21 = bust); for the reward baseline (CV)
 
 
 @dataclass
@@ -117,6 +118,7 @@ def capture_hand(policy: Strategy, config: SimulatorConfig | None = None) -> Cap
             can_split=r.can_split,
             can_double=r.can_double,
             action=r.action,
+            final_dealer_value=r.final_dealer_value,
         )
         for r in result.decision_records
         if r.action != "none"
