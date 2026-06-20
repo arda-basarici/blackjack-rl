@@ -150,6 +150,9 @@ class DQNAgent(Strategy):
         self._actions: tuple[Action, ...] = _SPLIT_ACTIONS if with_splits else _STAGE2_ACTIONS
         self._action_index: dict[Action, int] = {a: i for i, a in enumerate(self._actions)}
         self.q_net = QNetwork(feature_dim(encoding, with_splits), len(self._actions), hidden)
+        # Curriculum gate: when False, ``double`` is treated as illegal (never selected). The trainer
+        # flips this per episode for staged learning; default True = always available (A11/Stage 5).
+        self.double_enabled = True
         # (value, soft, upcard, action) -> training experience count; filled by the trainer
         # (instrumentation: lets us ask which action a cell was actually *tested* on).
         self.sample_counts: dict = {}
@@ -188,6 +191,8 @@ class DQNAgent(Strategy):
 
     def _legal_actions(self, state: GameState) -> list[Action]:
         legal: list[Action] = [a for a in state.legal_actions() if a in self._actions]
+        if not self.double_enabled:  # curriculum stage one: hide double from selection
+            legal = [a for a in legal if a != "double"]
         return legal or ["stand"]  # hit/stand are always legal; guard the empty case anyway
 
     def _greedy_over(self, state: GameState, legal: list[Action]) -> Action:

@@ -117,7 +117,8 @@ def hand_to_transitions(
 # --- the TD update (one gradient step of deep Q-learning) --------------------
 
 def td_target(
-    target: QNetwork, batch: Batch, gamma: float = 1.0, online: QNetwork | None = None
+    target: QNetwork, batch: Batch, gamma: float = 1.0, online: QNetwork | None = None,
+    mask_action: int | None = None,
 ) -> torch.Tensor:
     """The TD target y for each transition: ``r`` for terminal steps, else
     ``r + gamma * Q(s', a*)`` where a* is the best legal next action.
@@ -135,11 +136,15 @@ def td_target(
     through the target.
     """
     with torch.no_grad():
+        legal = batch.next_legal_masks
+        if mask_action is not None:  # curriculum stage one: keep double out of the bootstrap max
+            legal = legal.clone()
+            legal[:, mask_action] = False
         if online is None:  # vanilla: target net selects and evaluates
-            masked = target(batch.next_states).masked_fill(~batch.next_legal_masks, float("-inf"))
+            masked = target(batch.next_states).masked_fill(~legal, float("-inf"))
             next_value = masked.max(dim=1).values                            # [B]
         else:  # Double DQN: online selects (legal only), target evaluates
-            online_q = online(batch.next_states).masked_fill(~batch.next_legal_masks, float("-inf"))
+            online_q = online(batch.next_states).masked_fill(~legal, float("-inf"))
             best = online_q.argmax(dim=1, keepdim=True)                      # [B, 1]
             next_value = target(batch.next_states).gather(1, best).squeeze(1)  # [B]
         bootstrap = torch.where(batch.dones, torch.zeros_like(next_value), next_value)
@@ -153,14 +158,16 @@ def td_update(
     optimizer: torch.optim.Optimizer,
     gamma: float = 1.0,
     double: bool = False,
+    mask_action: int | None = None,
 ) -> float:
     """One gradient step of deep Q-learning on ``batch``: Huber (smooth-L1) loss between the online
     ``Q(s, a)`` of the taken actions and the TD target from the frozen target net. ``double`` uses
-    Double-DQN targets. Returns the loss value (for the learning curve). Gradients flow only through
-    the online net."""
+    Double-DQN targets; ``mask_action`` (a curriculum aid) excludes that action index from the
+    bootstrap max. Returns the loss value (for the learning curve). Gradients flow only through the
+    online net."""
     batch = batch.to(next(online.parameters()).device)  # buffer is CPU; move the minibatch to the net
     q_taken = online(batch.states).gather(1, batch.actions.unsqueeze(1)).squeeze(1)  # [B]
-    y = td_target(target, batch, gamma, online=online if double else None)
+    y = td_target(target, batch, gamma, online=online if double else None, mask_action=mask_action)
     loss = F.smooth_l1_loss(q_taken, y)
     optimizer.zero_grad()
     loss.backward()
@@ -268,11 +275,16 @@ def train_dqn(
     loss_sum, loss_count = 0.0, 0  # accumulated since the last checkpoint
     counts: dict = {}  # (value, soft, upcard, action) -> experience count
     swa_sum, swa_n = None, 0  # Stochastic Weight Averaging accumulator (back half of training)
+    double_idx = agent.actions.index("double") if "double" in agent.actions else None
 
     for i in range(total):
         agent.epsilon = epsilon_at(i)
         for group in optimizer.param_groups:  # anneal the step size (no-op for a constant schedule)
             group["lr"] = lr_at(i)
+        # curriculum: hold double out (selection + bootstrap max) until episode double_after
+        stage_one = i < config.double_after
+        agent.double_enabled = not stage_one
+        mask_action = double_idx if stage_one else None
         hand = capture_hand(agent, env_config)
         for s in hand.steps:
             kc = (s.player_value, s.player_is_soft, s.dealer_upcard, s.action)
@@ -285,7 +297,7 @@ def train_dqn(
                 for _ in range(config.updates_per_step):
                     loss = td_update(
                         agent.q_net, target, buffer.sample(config.batch_size), optimizer,
-                        config.gamma, double=config.double_dqn,
+                        config.gamma, double=config.double_dqn, mask_action=mask_action,
                     )
                     loss_sum += loss
                     loss_count += 1

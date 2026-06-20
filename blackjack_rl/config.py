@@ -116,6 +116,11 @@ class DQNConfig:
     device            : "cpu" (default), "cuda", or "auto" (cuda if available). For this tiny net +
                         sequential single-hand env loop, GPU isn't faster per run; its value is as a
                         parallel compute lane (a GPU run alongside CPU runs frees the CPU).
+    double_after      : curriculum knob. Episodes before this train hit/stand only — ``double`` is
+                        kept out of both action selection and the bootstrap max, so the low-variance
+                        base policy is learned clean and uncontaminated by the oscillating double-Q.
+                        At/after it, ``double`` is enabled and learned on the stable base. 0 (default)
+                        = no curriculum (double available from the start).
     """
 
     num_episodes: int
@@ -144,6 +149,7 @@ class DQNConfig:
     seed: int = 42
     num_threads: int = 1
     device: str = "cpu"
+    double_after: int = 0
 
     def torch_threads(self) -> int:
         """Resolve ``num_threads`` to a concrete count: 0 means all available cores."""
@@ -165,6 +171,8 @@ class DQNConfig:
             raise ValueError(f"num_threads must be >= 0 (0 = all cores), got {self.num_threads}")
         if self.device not in ("cpu", "cuda", "auto"):
             raise ValueError(f"device must be 'cpu', 'cuda', or 'auto', got {self.device!r}")
+        if self.double_after < 0:
+            raise ValueError(f"double_after must be >= 0, got {self.double_after}")
         if self.epsilon_schedule not in KINDS:
             raise ValueError(f"epsilon_schedule must be one of {KINDS}, got {self.epsilon_schedule!r}")
         for name, value in (

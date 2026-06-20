@@ -226,6 +226,7 @@ def main() -> None:
     parser.add_argument("--target-sync", type=int, default=1_000, help="hard-sync target every N steps")
     parser.add_argument("--target-tau", type=float, default=0.0, help="soft/Polyak target update each step (0 = hard sync)")
     parser.add_argument("--double-dqn", action="store_true", help="use Double-DQN targets (curb overestimation)")
+    parser.add_argument("--double-after", type=int, default=0, help="curriculum: train hit/stand only until this episode, then enable double (0 = off)")
     parser.add_argument("--encoding", choices=("scalar", "onehot"), default="scalar", help="input encoding for total+upcard")
     parser.add_argument("--exploring-starts", action="store_true", help="force (state,action) coverage (the DQN capstone)")
     parser.add_argument("--log-q-grid", action="store_true", help="log full per-cell Q each checkpoint (for trajectory plots)")
@@ -267,6 +268,7 @@ def main() -> None:
         seed=args.seed,
         num_threads=args.threads,
         device=args.device,
+        double_after=args.double_after,
     )
     log_file = None
     if not args.no_log:
