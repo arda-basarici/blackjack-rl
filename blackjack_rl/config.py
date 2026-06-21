@@ -161,6 +161,7 @@ class DQNConfig:
     num_threads: int = 1
     device: str = "cpu"
     double_after: int = 0
+    clear_buffer_on_double: bool = False
     reward_baseline: str = "none"
     baseline_c: float = 1.0
 
@@ -205,6 +206,8 @@ class DQNConfig:
             raise ValueError(f"lr_end must be > 0 for a {self.lr_schedule} schedule, got {self.lr_end}")
         if not 0 <= self.lr_hold_until < self.num_episodes:
             raise ValueError(f"lr_hold_until must be in [0, num_episodes), got {self.lr_hold_until}")
+        if self.clear_buffer_on_double and self.double_after <= 0:
+            raise ValueError("clear_buffer_on_double requires double_after > 0 (the introduction point)")
         if not 0.0 <= self.gamma <= 1.0:
             raise ValueError(f"gamma must be in [0, 1], got {self.gamma}")
         for name, value in (

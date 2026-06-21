@@ -86,6 +86,13 @@ class ReplayBuffer:
             self._buf[self._pos] = t
         self._pos = (self._pos + 1) % self.capacity
 
+    def clear(self) -> None:
+        """Drop all stored transitions and reset the ring. Used when a new action is introduced
+        mid-training (curriculum) so the buffer refills with data that can actually contain it,
+        instead of diluting the new action with a backlog that never played it."""
+        self._buf.clear()
+        self._pos = 0
+
     def can_sample(self, batch_size: int) -> bool:
         return len(self._buf) >= batch_size
 

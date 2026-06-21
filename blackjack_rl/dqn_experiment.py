@@ -230,6 +230,7 @@ def main() -> None:
     parser.add_argument("--target-tau", type=float, default=0.0, help="soft/Polyak target update each step (0 = hard sync)")
     parser.add_argument("--double-dqn", action="store_true", help="use Double-DQN targets (curb overestimation)")
     parser.add_argument("--double-after", type=int, default=0, help="curriculum: train hit/stand only until this episode, then enable double (0 = off)")
+    parser.add_argument("--clear-buffer-on-double", action="store_true", help="clear the replay buffer when double is introduced (--double-after), so phase 2 refills with double-bearing data instead of a hit/stand backlog")
     parser.add_argument("--reward-baseline", choices=("none", "bust", "stand"), default="none", help="dealer control variate on the terminal reward (strips dealer variance; EV/policy unchanged)")
     parser.add_argument("--baseline-c", type=float, default=1.0, help="coefficient for the 'bust' reward baseline")
     parser.add_argument("--encoding", choices=("scalar", "onehot", "thermometer"), default="scalar", help="input encoding for total+upcard")
@@ -277,6 +278,7 @@ def main() -> None:
         num_threads=args.threads,
         device=args.device,
         double_after=args.double_after,
+        clear_buffer_on_double=args.clear_buffer_on_double,
         reward_baseline=args.reward_baseline,
         baseline_c=args.baseline_c,
     )

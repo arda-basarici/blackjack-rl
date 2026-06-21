@@ -299,6 +299,8 @@ def train_dqn(
         stage_one = i < config.double_after
         agent.double_enabled = not stage_one
         mask_action = double_idx if stage_one else None
+        if config.clear_buffer_on_double and config.double_after and i == config.double_after:
+            buffer.clear()  # drop the hit/stand-only backlog so phase 2 refills with double-bearing data
         hand = capture_hand(agent, env_config)
         for s in hand.steps:
             kc = (s.player_value, s.player_is_soft, s.dealer_upcard, s.action)

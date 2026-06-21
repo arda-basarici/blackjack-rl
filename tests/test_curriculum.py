@@ -64,3 +64,44 @@ def test_stage_one_only_run_never_doubles(tmp_path) -> None:
     res = run_dqn(cfg, eval_hands=200, runs_dir=tmp_path, progress_every=None, save=False)
     actions = {k[3] for k in res.agent.sample_counts}
     assert "double" not in actions  # double never enabled -> never taken
+
+
+def test_replay_buffer_clear_resets_and_is_reusable() -> None:
+    from blackjack_rl.training.replay import ReplayBuffer, Transition
+
+    def _t() -> Transition:
+        return Transition(state=torch.zeros(4), action=0, reward=0.0, next_state=torch.zeros(4),
+                          done=True, next_legal_mask=torch.ones(3, dtype=torch.bool))
+    buf = ReplayBuffer(capacity=10)
+    for _ in range(5):
+        buf.push(_t())
+    assert len(buf) == 5
+    buf.clear()
+    assert len(buf) == 0 and buf._pos == 0
+    buf.push(_t())                       # still usable after clearing
+    assert len(buf) == 1
+
+
+def test_clear_buffer_on_double_config_validation() -> None:
+    assert DQNConfig(num_episodes=100).clear_buffer_on_double is False
+    DQNConfig(num_episodes=100, double_after=50, clear_buffer_on_double=True)  # ok with a switch point
+    try:
+        DQNConfig(num_episodes=100, double_after=0, clear_buffer_on_double=True)  # no switch to clear at
+    except ValueError:
+        return
+    raise AssertionError("expected ValueError for clear_buffer_on_double without double_after")
+
+
+def test_clear_buffer_on_double_drops_backlog() -> None:
+    """At the double switch the buffer is flushed, so shortly after it carries far fewer
+    transitions than the un-cleared run that keeps its whole hit/stand backlog."""
+    from blackjack_rl.training.deep_q import train_dqn
+
+    def buffer_after_switch(clear: bool) -> int:
+        curve: list[dict] = []
+        cfg = DQNConfig(num_episodes=400, double_after=200, clear_buffer_on_double=clear,
+                        warmup=10, batch_size=8, buffer_capacity=10_000, encoding="onehot", seed=0)
+        train_dqn(cfg, progress_every=100, on_checkpoint=curve.append)
+        return next(cp["buffer"] for cp in curve if cp["episode"] == 300)  # 100 eps after the switch
+
+    assert buffer_after_switch(clear=True) < buffer_after_switch(clear=False)
