@@ -141,6 +141,7 @@ class DQNConfig:
     lr: float = 1e-3
     lr_schedule: str = "constant"
     lr_end: float = 1e-5
+    lr_hold_until: int = 0
     gamma: float = 1.0
     batch_size: int = 128
     buffer_capacity: int = 50_000
@@ -202,6 +203,8 @@ class DQNConfig:
             raise ValueError(f"lr_schedule must be one of {KINDS}, got {self.lr_schedule!r}")
         if self.lr_schedule in ("exponential", "harmonic") and self.lr_end <= 0.0:
             raise ValueError(f"lr_end must be > 0 for a {self.lr_schedule} schedule, got {self.lr_end}")
+        if not 0 <= self.lr_hold_until < self.num_episodes:
+            raise ValueError(f"lr_hold_until must be in [0, num_episodes), got {self.lr_hold_until}")
         if not 0.0 <= self.gamma <= 1.0:
             raise ValueError(f"gamma must be in [0, 1], got {self.gamma}")
         for name, value in (

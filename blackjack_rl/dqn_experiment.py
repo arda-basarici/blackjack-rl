@@ -218,6 +218,7 @@ def main() -> None:
     parser.add_argument("--lr", type=float, default=1e-3, help="Adam learning rate (start rate if lr decays)")
     parser.add_argument("--lr-schedule", choices=KINDS, default="constant", help="learning-rate schedule (decay lets the estimate converge; constant = original)")
     parser.add_argument("--lr-end", type=float, default=1e-5, help="end learning rate for a decaying schedule (>0 for harmonic/exponential)")
+    parser.add_argument("--lr-hold-until", type=int, default=0, help="keep lr flat at --lr until this episode, then decay to --lr-end over the rest (0=decay from start; pair with --double-after for flat-then-decay)")
     parser.add_argument("--gamma", type=float, default=1.0, help="TD discount (1.0 for Problem A)")
     parser.add_argument("--hidden", type=str, default="64,64", help="hidden layer sizes, comma-separated")
     parser.add_argument("--batch-size", type=int, default=128, help="replay minibatch size")
@@ -255,6 +256,7 @@ def main() -> None:
         lr=args.lr,
         lr_schedule=args.lr_schedule,
         lr_end=args.lr_end,
+        lr_hold_until=args.lr_hold_until,
         gamma=args.gamma,
         hidden=_parse_hidden(args.hidden),
         batch_size=args.batch_size,

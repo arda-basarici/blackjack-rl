@@ -278,6 +278,7 @@ def train_dqn(
         start=config.lr,
         end=config.lr_end,
         num_episodes=config.num_episodes,
+        hold=config.lr_hold_until,
     )
 
     total = config.num_episodes
