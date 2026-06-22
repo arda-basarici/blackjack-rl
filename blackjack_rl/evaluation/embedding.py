@@ -64,10 +64,11 @@ def cell_embeddings(agent: DQNAgent, ev_tol: float = 0.02) -> CellEmbeddings:
     Joins the learned representation with the policy diff vs basic strategy so a PCA / t-SNE scatter
     can be colored by chosen ``action``, by diff ``category`` (agree / near_equal_ev /
     genuine_disagreement), or by ``q_margin`` (Q(best) - Q(2nd) over legal actions — the net's own
-    confidence). Cells are the 240 canonical (player_value, is_soft, dealer_upcard) no-split cells.
+    confidence). Cells are the canonical (player_value, is_soft, dealer_upcard, can_split) decision
+    cells — the 240 no-split grid, plus the 10-pair split column when ``agent.with_splits``.
     """
-    cells = enumerate_cells()
-    states = [_state_for(v, s, u) for (v, s, u) in cells]
+    cells = enumerate_cells(agent.with_splits)
+    states = [_state_for(v, s, u, cs) for (v, s, u, cs) in cells]
     feats = torch.tensor(
         [encode_features(st, agent.with_splits, agent.encoding) for st in states],
         dtype=torch.float32,
@@ -76,20 +77,21 @@ def cell_embeddings(agent: DQNAgent, ev_tol: float = 0.02) -> CellEmbeddings:
         emb = agent.q_net.features(feats)  # [n_cells, hidden_last]
 
     report = diff_network(agent, ev_tol=ev_tol)
-    by_key = {(c.player_value, c.is_soft, c.dealer_upcard): c for c in report.cells}
+    by_key = {(c.player_value, c.is_soft, c.dealer_upcard, c.can_split): c for c in report.cells}
 
     meta: list[dict] = []
-    for (v, s, u), st in zip(cells, states):
+    for (v, s, u, cs), st in zip(cells, states):
         q = agent.q_values(st)
         legal_idx = [agent.actions.index(a) for a in st.legal_actions() if a in agent.actions]
         vals = sorted((float(q[i]) for i in legal_idx), reverse=True)
         margin = vals[0] - vals[1] if len(vals) > 1 else float("nan")
-        d = by_key.get((v, s, u))
+        d = by_key.get((v, s, u, cs))
         meta.append(
             {
                 "player_value": v,
                 "is_soft": s,
                 "dealer_upcard": u,
+                "can_split": cs,
                 "action": d.agent_action if d else agent.greedy_action(st),
                 "basic_action": d.basic_action if d else None,
                 "category": d.category if d else None,

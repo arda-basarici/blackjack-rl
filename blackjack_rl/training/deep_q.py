@@ -198,10 +198,10 @@ PROBE_CELLS: tuple[tuple[int, bool, int], ...] = (
 )
 
 
-def _probe_state(value: int, is_soft: bool, upcard: int) -> GameState:
+def _probe_state(value: int, is_soft: bool, upcard: int, can_split: bool = False) -> GameState:
     return GameState(
         player_value=value, player_is_soft=is_soft, player_card_count=2, dealer_upcard=upcard,
-        can_hit=True, can_stand=True, can_double=True, can_split=False, can_surrender=False,
+        can_hit=True, can_stand=True, can_double=True, can_split=can_split, can_surrender=False,
     )
 
 
@@ -217,15 +217,14 @@ def probe_q_values(agent: DQNAgent, cells: tuple[tuple[int, bool, int], ...] = P
 
 
 def full_q_grid(agent: DQNAgent) -> dict:
-    """Q for every action at every one of the 240 canonical cells — a full snapshot, so per-cell
-    Q-trajectories can be plotted for *any* disagreement. 240 forward passes; logged at each
-    checkpoint only when ``DQNConfig.log_q_grid`` is set (keeps records small otherwise)."""
+    """Q for every action at every canonical cell — a full snapshot, so per-cell Q-trajectories can
+    be plotted for *any* disagreement. 240 no-split cells (+100 pairs when the agent plays splits);
+    logged at each checkpoint only when ``DQNConfig.log_q_grid`` is set (keeps records small)."""
     out: dict[str, dict] = {}
-    for value, is_soft, upcard in enumerate_cells():
-        q = agent.q_values(_probe_state(value, is_soft, upcard))
-        out[f"{'soft' if is_soft else 'hard'}{value}_v{upcard}"] = {
-            a: round(float(q[i]), 3) for i, a in enumerate(agent.actions)
-        }
+    for value, is_soft, upcard, can_split in enumerate_cells(agent.with_splits):
+        q = agent.q_values(_probe_state(value, is_soft, upcard, can_split))
+        label = f"{'soft' if is_soft else 'hard'}{value}_v{upcard}" + ("_p" if can_split else "")
+        out[label] = {a: round(float(q[i]), 3) for i, a in enumerate(agent.actions)}
     return out
 
 
