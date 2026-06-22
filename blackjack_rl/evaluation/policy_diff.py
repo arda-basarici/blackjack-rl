@@ -73,11 +73,13 @@ def classify(
 
 
 def _canonical_state(
-    player_value: int, is_soft: bool, dealer_upcard: int, can_split: bool = False
+    player_value: int, is_soft: bool, dealer_upcard: int, can_split: bool = False,
+    can_surrender: bool = False,
 ) -> GameState:
-    """A 2-card decision state for cell-by-cell comparison: doubling allowed, surrender off, and
-    split allowed iff this cell is a splittable pair — so the agent and basic strategy choose
-    over the same actions for that cell (including the pairs column)."""
+    """A 2-card decision state for cell-by-cell comparison: doubling allowed; split allowed iff this
+    cell is a splittable pair; surrender allowed iff the agent plays it (it is first-action only, and
+    every cell here is a first-action 2-card state) — so the agent and basic strategy choose over the
+    same actions for that cell."""
     return GameState(
         player_value=player_value,
         player_is_soft=is_soft,
@@ -87,7 +89,7 @@ def _canonical_state(
         can_stand=True,
         can_double=True,
         can_split=can_split,
-        can_surrender=False,
+        can_surrender=can_surrender,
     )
 
 
@@ -105,8 +107,11 @@ def diff_policy(
     basic: Strategy | None = None,
     min_visits: int = 1000,
     ev_tol: float = 0.02,
+    with_surrender: bool = False,
 ) -> DiffReport:
-    """Compare ``agent``'s greedy policy to ``basic`` over every cell the agent has visited."""
+    """Compare ``agent``'s greedy policy to ``basic`` over every cell the agent has visited.
+    ``with_surrender`` offers surrender as an option in the comparison states (first-action only,
+    which every cell here is), so the surrender cells are scored instead of silently ignored."""
     basic_strategy: Strategy = basic if basic is not None else BasicStrategy()
 
     visits_by_state: dict[StateKey, int] = {}
@@ -116,7 +121,7 @@ def diff_policy(
     cells: list[CellDiff] = []
     for state_key in sorted(visits_by_state):
         player_value, is_soft, dealer_upcard, can_split = _unpack(state_key)
-        state = _canonical_state(player_value, is_soft, dealer_upcard, can_split)
+        state = _canonical_state(player_value, is_soft, dealer_upcard, can_split, with_surrender)
         agent_action = agent.greedy_action(state)
         basic_action = basic_strategy.decide(state)
         agent_q = agent.q.get((state_key, agent_action), 0.0)

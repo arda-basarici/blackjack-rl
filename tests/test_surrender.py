@@ -49,3 +49,14 @@ def test_surrender_run_completes(tmp_path) -> None:
                     buffer_capacity=500, encoding="onehot", seed=0)
     res = run_dqn(cfg, eval_hands=200, runs_dir=tmp_path, progress_every=None, save=False)
     assert "surrender" in res.agent.actions  # full action set trained + evaluated end to end
+
+
+def test_diff_scores_surrender_only_when_agent_plays_it() -> None:
+    """The diff offers surrender as an option iff the agent plays it, so the surrender cells (hard 16
+    vs 9/10/A, hard 15 vs 10) are scored — not silently dropped as they were before."""
+    from blackjack_rl.evaluation.network_diff import diff_network
+
+    with_s = diff_network(DQNAgent(epsilon=0.0, with_surrender=True, encoding="onehot"))
+    assert any(c.basic_action == "surrender" for c in with_s.cells)   # basic surrenders some cell
+    without_s = diff_network(DQNAgent(epsilon=0.0, with_surrender=False, encoding="onehot"))
+    assert all(c.basic_action != "surrender" for c in without_s.cells)  # off -> never offered

@@ -54,9 +54,11 @@ def enumerate_cells(with_splits: bool = False) -> list[tuple[int, bool, int, boo
     return cells
 
 
-def _state_for(value: int, is_soft: bool, upcard: int, can_split: bool = False) -> GameState:
-    """A 2-card decision state for one cell: doubling allowed, surrender off, and split allowed iff
-    this cell is a splittable pair — so the network and basic strategy choose over the same actions."""
+def _state_for(value: int, is_soft: bool, upcard: int, can_split: bool = False,
+               can_surrender: bool = False) -> GameState:
+    """A 2-card decision state for one cell: doubling allowed; split allowed iff a splittable pair;
+    surrender allowed iff the agent plays it — so the network and basic strategy choose over the
+    same actions."""
     return GameState(
         player_value=value,
         player_is_soft=is_soft,
@@ -66,7 +68,7 @@ def _state_for(value: int, is_soft: bool, upcard: int, can_split: bool = False) 
         can_stand=True,
         can_double=True,
         can_split=can_split,
-        can_surrender=False,
+        can_surrender=can_surrender,
     )
 
 
@@ -91,7 +93,8 @@ def materialize(agent: DQNAgent) -> _MaterializedPolicy:
     table = _MaterializedPolicy(agent=agent)
     for value, is_soft, upcard, can_split in enumerate_cells(agent.with_splits):
         key: StateKey = (value, is_soft, upcard, True) if can_split else (value, is_soft, upcard)
-        q_values = agent.q_values(_state_for(value, is_soft, upcard, can_split))  # agent.actions order
+        st = _state_for(value, is_soft, upcard, can_split, agent.with_surrender)
+        q_values = agent.q_values(st)  # over agent.actions order
         for i, action in enumerate(agent.actions):
             table.q[(key, action)] = float(q_values[i].item())
         table.n[(key, agent.actions[0])] = 1  # one entry so the cell appears in the diff
@@ -100,6 +103,8 @@ def materialize(agent: DQNAgent) -> _MaterializedPolicy:
 
 def diff_network(agent: DQNAgent, ev_tol: float = 0.02) -> DiffReport:
     """Fidelity report for a trained network vs basic strategy. Materializes the net's policy by
-    querying every cell, then reuses ``diff_policy`` with ``min_visits=0`` (no ``under_visited``
-    for a generalizing model)."""
-    return diff_policy(materialize(agent), min_visits=0, ev_tol=ev_tol)
+    querying every cell, then reuses ``diff_policy`` with ``min_visits=0`` (no ``under_visited`` for
+    a generalizing model). Surrender is offered in the comparison iff the agent plays it."""
+    return diff_policy(
+        materialize(agent), min_visits=0, ev_tol=ev_tol, with_surrender=agent.with_surrender
+    )
