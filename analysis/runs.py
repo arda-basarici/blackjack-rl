@@ -31,6 +31,31 @@ OPTIMUM_PCT = {                    # basic-strategy house edge, %/hand, fresh 6-
 }
 
 
+def reeval_edges() -> dict:
+    """Tight re-evaluated edges (%/hand) from ``reeval_results.json`` (written by ``reeval_edges.py`` over
+    millions of hands), keyed by BOTH policy label and run-id. Returns ``{}`` until that file exists, so a
+    scoreboard cleanly falls back to the recorded 200k edge in the meantime — no hardcoded numbers."""
+    p = ROOT / "reeval_results.json"
+    out = {}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    except Exception:                      # partial/corrupt write mid-run — fall back to recorded edges
+        return {}
+    for r in data.get("results", []):
+        if r.get("edge_pct") is None:
+            continue
+        out[r["policy"]] = r["edge_pct"]
+        if r.get("run"):
+            out[r["run"]] = r["edge_pct"]
+    return out
+
+
+def tight_edge(key, default=None):
+    """The re-evaluated (tight, millions-of-hands) edge for a run-id or policy label, else ``default`` —
+    so a scoreboard reads the re-eval when present and the recorded 200k value until then."""
+    return reeval_edges().get(key, default)
+
+
 def _soft20_double_std(lc: list) -> float | None:
     """Back-half std of Q(double | soft-20 vs dealer-8) — the oscillation metric. None if not logged."""
     d = [cp["probe_q"]["soft20_v8"]["double"] for cp in lc if cp.get("probe_q")]
@@ -87,7 +112,14 @@ def load_runs(runs_dir: str | Path | None = None) -> pd.DataFrame:
             "has_model": (Path(f).parent / "model.pt").exists(),
             "path": str(Path(f).parent),
         })
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    # Fold the tight re-evaluated edges (reeval_results.json, millions of hands) over the noisy 200k
+    # record edges, keyed by run-id — so every scoreboard reads one consistent source. No-op until the
+    # file exists. Only the re-evaluated runs change; everything else keeps its recorded edge.
+    _re = reeval_edges()
+    if _re and len(df):
+        df["edge_pct"] = [round(_re.get(run, e), 3) for run, e in zip(df["run"], df["edge_pct"])]
+    return df
 
 
 def learning_curve(path: str | Path) -> list[dict]:

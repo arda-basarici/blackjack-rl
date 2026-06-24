@@ -1,0 +1,55 @@
+{
+  "eval_hands": 5000000,
+  "seed": 0,
+  "results": [
+    {
+      "policy": "basic (no-surrender optimum)",
+      "run": null,
+      "edge_pct": 0.3306,
+      "se_pct": 0.0516,
+      "n": 5000000
+    },
+    {
+      "policy": "basic (with-surrender optimum)",
+      "run": null,
+      "edge_pct": 0.2604,
+      "se_pct": 0.051,
+      "n": 5000000
+    },
+    {
+      "policy": "best DQN (trimmed)",
+      "run": "20260622-015812_seed42_afbf4c5",
+      "edge_pct": 1.0819,
+      "se_pct": 0.0504,
+      "n": 5000000
+    },
+    {
+      "policy": "tabular (trimmed)",
+      "run": "20260617-152831_seed42_c298e9c",
+      "edge_pct": 0.9856,
+      "se_pct": 0.0495,
+      "n": 5000000
+    },
+    {
+      "policy": "tabular (split)",
+      "run": "20260618-001215_seed42_a642d60",
+      "edge_pct": 0.5757,
+      "se_pct": 0.0508,
+      "n": 5000000
+    },
+    {
+      "policy": "DQN (complete [16,16])",
+      "run": "20260622-144112_seed42_050857d",
+      "edge_pct": 1.1373,
+      "se_pct": 0.0532,
+      "n": 5000000
+    },
+    {
+      "policy": "DQN (complete [64,64])",
+      "run": "20260623-173931_seed42_050857d",
+      "edge_pct": 1.1651,
+      "se_pct": 0.0532,
+      "n": 5000000
+    }
+  ]
+}

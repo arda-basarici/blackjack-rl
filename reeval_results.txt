@@ -1,0 +1,9 @@
+re-eval over 5000000 hands, seed 0
+
+basic (no-surrender optimum)   edge =   0.331%  +/- 0.052%
+basic (with-surrender optimum) edge =   0.260%  +/- 0.051%
+best DQN (trimmed)             edge =   1.082%  +/- 0.050%
+tabular (trimmed)              edge =   0.986%  +/- 0.050%
+tabular (split)                edge =   0.576%  +/- 0.051%
+DQN (complete [16,16])         edge =   1.137%  +/- 0.053%
+DQN (complete [64,64])         edge =   1.165%  +/- 0.053%
