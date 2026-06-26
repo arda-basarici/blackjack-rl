@@ -7,10 +7,10 @@ import random
 
 import torch
 
-from blackjack_rl.agents.dqn import DQNAgent
+from blackjack_rl.dqn.agent import DQNAgent
 from blackjack_rl.config import DQNConfig
 from blackjack_rl.env import problem_a_config
-from blackjack_rl.training.exploring_starts_dqn import es_capture, train_dqn_es
+from blackjack_rl.dqn.exploring_starts_dqn import es_capture, train_dqn_es
 
 
 def _state(value: int = 16, soft: bool = False, upcard: int = 10):

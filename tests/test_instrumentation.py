@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import torch
 
-from blackjack_rl.agents.dqn import DQNAgent
+from blackjack_rl.dqn.agent import DQNAgent
 from blackjack_rl.config import DQNConfig
-from blackjack_rl.training.deep_q import PROBE_CELLS, probe_q_values, train_dqn
+from blackjack_rl.dqn.deep_q import PROBE_CELLS, probe_q_values, train_dqn
 
 
 def test_probe_q_values_shape() -> None:

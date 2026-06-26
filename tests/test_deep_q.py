@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import torch
 
-from blackjack_rl.agents.dqn import QNetwork
-from blackjack_rl.training.deep_q import make_target, sync_target
+from blackjack_rl.dqn.agent import QNetwork
+from blackjack_rl.dqn.deep_q import make_target, sync_target
 
 
 def _params_equal(a: QNetwork, b: QNetwork) -> bool:

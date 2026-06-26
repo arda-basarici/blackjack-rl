@@ -3,13 +3,13 @@ wiring into hand_to_transitions: distribution sanity, unbiasedness (mean-zero), 
 and that the terminal reward is adjusted correctly (stand baseline drives a stand reward to V_stand)."""
 from __future__ import annotations
 
-from blackjack_rl.agents.dqn import DQNAgent
+from blackjack_rl.dqn.agent import DQNAgent
 from blackjack_rl.config import DQNConfig
 from blackjack_rl.env import CapturedHand, Step
-from blackjack_rl.evaluation.dealer_baseline import (
+from blackjack_rl.dqn.dealer_baseline import (
     baseline, dealer_outcome_dist, score, stand_value,
 )
-from blackjack_rl.training.deep_q import hand_to_transitions
+from blackjack_rl.dqn.deep_q import hand_to_transitions
 
 
 def test_dealer_distribution_normalized_and_plausible() -> None:

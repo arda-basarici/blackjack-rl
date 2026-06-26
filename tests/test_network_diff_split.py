@@ -2,8 +2,8 @@
 basic strategy when the agent plays splits, and a no-split agent is unaffected (A11)."""
 from __future__ import annotations
 
-from blackjack_rl.agents.dqn import DQNAgent
-from blackjack_rl.evaluation.network_diff import diff_network, enumerate_cells
+from blackjack_rl.dqn.agent import DQNAgent
+from blackjack_rl.dqn.network_diff import diff_network, enumerate_cells
 
 
 def test_enumerate_cells_adds_pair_column() -> None:

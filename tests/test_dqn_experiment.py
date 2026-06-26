@@ -3,9 +3,9 @@ with no persistence. Not a quality check — just that the orchestration wires t
 a sane result."""
 from __future__ import annotations
 
-from blackjack_rl.agents.dqn import DQNAgent
+from blackjack_rl.dqn.agent import DQNAgent
 from blackjack_rl.config import DQNConfig
-from blackjack_rl.dqn_experiment import run_dqn
+from blackjack_rl.dqn.experiment import run_dqn
 from blackjack_rl.evaluation.policy_diff import DiffReport
 
 

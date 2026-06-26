@@ -38,7 +38,7 @@ def test_bad_device_rejected() -> None:
 
 def test_cpu_training_runs_on_cpu_device(tmp_path) -> None:
     """A tiny end-to-end run with device='cpu' trains and evaluates without error."""
-    from blackjack_rl.dqn_experiment import run_dqn
+    from blackjack_rl.dqn.experiment import run_dqn
 
     cfg = DQNConfig(num_episodes=200, warmup=10, batch_size=8, buffer_capacity=500,
                     encoding="onehot", device="cpu", seed=0)

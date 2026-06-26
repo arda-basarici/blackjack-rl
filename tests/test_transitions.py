@@ -12,9 +12,9 @@ import torch
 from simulator.game_state import Action, GameState
 from strategies.base import Strategy
 
-from blackjack_rl.agents.dqn import encode_features
+from blackjack_rl.dqn.agent import encode_features
 from blackjack_rl.env import CapturedHand, Step, capture_hand
-from blackjack_rl.training.deep_q import hand_to_transitions
+from blackjack_rl.dqn.deep_q import hand_to_transitions
 
 ACTIONS: tuple[Action, ...] = ("hit", "stand", "double")
 

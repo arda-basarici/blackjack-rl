@@ -1,10 +1,10 @@
 """Tests for the surrender action (flag-gated, terminal, first-action-only)."""
 from __future__ import annotations
 
-from blackjack_rl.agents.dqn import DQNAgent
+from blackjack_rl.dqn.agent import DQNAgent
 from blackjack_rl.config import DQNConfig
 from blackjack_rl.env import CapturedHand, Step, problem_a_config
-from blackjack_rl.training.deep_q import _legal_mask, hand_to_transitions
+from blackjack_rl.dqn.deep_q import _legal_mask, hand_to_transitions
 
 
 def test_action_set_includes_surrender_when_flagged() -> None:
@@ -44,7 +44,7 @@ def test_config_accepts_with_surrender() -> None:
 
 
 def test_surrender_run_completes(tmp_path) -> None:
-    from blackjack_rl.dqn_experiment import run_dqn
+    from blackjack_rl.dqn.experiment import run_dqn
     cfg = DQNConfig(num_episodes=300, with_surrender=True, warmup=10, batch_size=8,
                     buffer_capacity=500, encoding="onehot", seed=0)
     res = run_dqn(cfg, eval_hands=200, runs_dir=tmp_path, progress_every=None, save=False)
@@ -54,7 +54,7 @@ def test_surrender_run_completes(tmp_path) -> None:
 def test_diff_scores_surrender_only_when_agent_plays_it() -> None:
     """The diff offers surrender as an option iff the agent plays it, so the surrender cells (hard 16
     vs 9/10/A, hard 15 vs 10) are scored — not silently dropped as they were before."""
-    from blackjack_rl.evaluation.network_diff import diff_network
+    from blackjack_rl.dqn.network_diff import diff_network
 
     with_s = diff_network(DQNAgent(epsilon=0.0, with_surrender=True, encoding="onehot"))
     assert any(c.basic_action == "surrender" for c in with_s.cells)   # basic surrenders some cell

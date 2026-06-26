@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import torch
 
-from blackjack_rl.training.deep_q import td_target
-from blackjack_rl.training.replay import Batch
+from blackjack_rl.dqn.deep_q import td_target
+from blackjack_rl.dqn.replay import Batch
 
 
 class _ConstQ:

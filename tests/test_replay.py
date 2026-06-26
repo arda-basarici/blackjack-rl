@@ -6,7 +6,7 @@ import random
 
 import torch
 
-from blackjack_rl.training.replay import Batch, ReplayBuffer, Transition
+from blackjack_rl.dqn.replay import Batch, ReplayBuffer, Transition
 
 
 def _transition(value: float = 0.0, n_actions: int = 3, in_dim: int = 3) -> Transition:

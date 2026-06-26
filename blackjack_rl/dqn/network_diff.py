@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 
 from simulator.game_state import Action, GameState
 
-from blackjack_rl.agents.dqn import DQNAgent
+from blackjack_rl.dqn.agent import DQNAgent
 from blackjack_rl.evaluation.policy_diff import DiffReport, diff_policy
 from blackjack_rl.state import StateKey
 

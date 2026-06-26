@@ -59,7 +59,7 @@ def load_dqn(run_dir: str):
     action head matches the checkpoint (the repo's load_agent omits with_surrender -> 4 vs 5 action
     size-mismatch on complete-game runs)."""
     import torch
-    from blackjack_rl.agents.dqn import DQNAgent
+    from blackjack_rl.dqn.agent import DQNAgent
     cfg = json.loads((RUNS / run_dir / "record.json").read_text(encoding="utf-8"))["config"]
     agent = DQNAgent(epsilon=0.0,
                      with_splits=bool(cfg.get("with_splits", False)),

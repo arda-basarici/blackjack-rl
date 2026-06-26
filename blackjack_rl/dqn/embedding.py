@@ -21,8 +21,8 @@ from pathlib import Path
 
 import torch
 
-from blackjack_rl.agents.dqn import DQNAgent, encode_features
-from blackjack_rl.evaluation.network_diff import _state_for, diff_network, enumerate_cells
+from blackjack_rl.dqn.agent import DQNAgent, encode_features
+from blackjack_rl.dqn.network_diff import _state_for, diff_network, enumerate_cells
 
 
 def load_agent(run_dir: Path | str) -> DQNAgent:

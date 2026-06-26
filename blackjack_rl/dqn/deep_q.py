@@ -23,13 +23,13 @@ from torch.nn import functional as F
 
 from simulator.game_state import Action, GameState
 
-from blackjack_rl.agents.dqn import DQNAgent, QNetwork, encode_features
+from blackjack_rl.dqn.agent import DQNAgent, QNetwork, encode_features
 from blackjack_rl.config import DQNConfig
 from blackjack_rl.env import CapturedHand, Step, capture_hand, problem_a_config
-from blackjack_rl.evaluation.dealer_baseline import baseline
-from blackjack_rl.evaluation.network_diff import diff_network, enumerate_cells
+from blackjack_rl.dqn.dealer_baseline import baseline
+from blackjack_rl.dqn.network_diff import diff_network, enumerate_cells
 from blackjack_rl.schedules import make_schedule
-from blackjack_rl.training.replay import Batch, ReplayBuffer, Transition
+from blackjack_rl.dqn.replay import Batch, ReplayBuffer, Transition
 from blackjack_rl.util import format_duration
 
 

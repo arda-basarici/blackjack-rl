@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import torch
 
-from blackjack_rl.agents.dqn import QNetwork
+from blackjack_rl.dqn.agent import QNetwork
 from blackjack_rl.config import DQNConfig
-from blackjack_rl.dqn_experiment import run_dqn
-from blackjack_rl.evaluation.embedding import cell_embeddings, load_agent
-from blackjack_rl.evaluation.network_diff import _state_for
+from blackjack_rl.dqn.experiment import run_dqn
+from blackjack_rl.dqn.embedding import cell_embeddings, load_agent
+from blackjack_rl.dqn.network_diff import _state_for
 
 
 def test_features_returns_penultimate_activations() -> None:

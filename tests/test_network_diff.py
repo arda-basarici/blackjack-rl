@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import torch
 
-from blackjack_rl.agents.dqn import DQNAgent
-from blackjack_rl.evaluation.network_diff import diff_network, enumerate_cells, materialize
+from blackjack_rl.dqn.agent import DQNAgent
+from blackjack_rl.dqn.network_diff import diff_network, enumerate_cells, materialize
 
 
 def _force_action(agent: DQNAgent, action: str) -> None:

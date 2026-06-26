@@ -3,7 +3,7 @@ each learning-curve checkpoint carries an agreement-with-basic-strategy snapshot
 from __future__ import annotations
 
 from blackjack_rl.config import DQNConfig
-from blackjack_rl.training.deep_q import train_dqn
+from blackjack_rl.dqn.deep_q import train_dqn
 
 
 def _final_checkpoint(cfg: DQNConfig) -> dict:

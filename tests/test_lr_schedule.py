@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from blackjack_rl.config import DQNConfig
 from blackjack_rl.schedules import make_epsilon_schedule, make_schedule
-from blackjack_rl.training.deep_q import train_dqn
+from blackjack_rl.dqn.deep_q import train_dqn
 
 
 def test_make_schedule_is_generic_and_aliased() -> None:

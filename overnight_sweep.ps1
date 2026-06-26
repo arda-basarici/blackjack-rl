@@ -68,7 +68,7 @@ for ($i = 0; $i -lt $total; $i++) {
     Write-Host "[$($i + 1)/$total]  $label   (started $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))"
     Write-Host "  args: $($variants[$i][1] -join ' ')"
     Write-Host "================================================================"
-    python -m blackjack_rl.dqn_experiment @runArgs
+    python -m blackjack_rl.dqn.experiment @runArgs
 }
 Write-Host ""
 Write-Host "ALL $total RUNS DONE  (elapsed $((Get-Date) - $start))"

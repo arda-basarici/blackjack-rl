@@ -7,7 +7,7 @@ import torch
 
 from simulator.game_state import Action, GameState
 
-from blackjack_rl.agents.dqn import DQNAgent, encode_features, feature_dim
+from blackjack_rl.dqn.agent import DQNAgent, encode_features, feature_dim
 
 
 def _state(value: int = 16, soft: bool = False, upcard: int = 10) -> GameState:

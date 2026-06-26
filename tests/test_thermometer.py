@@ -1,7 +1,7 @@
 """Tests for the thermometer (cumulative/unary) encoding — between scalar and one-hot."""
 from __future__ import annotations
 
-from blackjack_rl.agents.dqn import _thermometer, encode_features, feature_dim
+from blackjack_rl.dqn.agent import _thermometer, encode_features, feature_dim
 from blackjack_rl.config import DQNConfig
 from blackjack_rl.env import Step
 

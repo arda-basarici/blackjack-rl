@@ -13,9 +13,9 @@ import torch
 
 from simulator.game_state import Action, GameState
 
-from blackjack_rl.agents.dqn import DQNAgent
+from blackjack_rl.dqn.agent import DQNAgent
 from blackjack_rl.config import DQNConfig
-from blackjack_rl.training.deep_q import train_dqn
+from blackjack_rl.dqn.deep_q import train_dqn
 
 
 def _decision_state(value: int = 16, soft: bool = False, upcard: int = 10) -> GameState:

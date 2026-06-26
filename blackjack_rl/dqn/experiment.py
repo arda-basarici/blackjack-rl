@@ -6,7 +6,7 @@ by *interrogating* the network cell by cell (``network_diff``), assemble a recor
 (never overwriting). No Q-table is stored — the network has none — so the saved ``diff.cells`` are
 the materialized policy; a same-seed rerun reproduces the agent (A7, no checkpoint/resume yet).
 
-    python -m blackjack_rl.dqn_experiment --episodes 2000000 \
+    python -m blackjack_rl.dqn.experiment --episodes 2000000 \
         --epsilon-schedule linear --epsilon-start 0.3 --epsilon-end 0.0 --eval-hands 1000000
 """
 from __future__ import annotations
@@ -22,16 +22,16 @@ import torch
 
 from strategies.basic_strategy import BasicStrategy
 
-from blackjack_rl.agents.dqn import DQNAgent
+from blackjack_rl.dqn.agent import DQNAgent
 from blackjack_rl.config import DQNConfig
 from blackjack_rl.env import problem_a_config
 from blackjack_rl.evaluation.metrics import EdgeResult, GreedyPolicy, evaluate_policy
-from blackjack_rl.evaluation.network_diff import diff_network
+from blackjack_rl.dqn.network_diff import diff_network
 from blackjack_rl.evaluation.policy_diff import DiffReport
 from blackjack_rl.persistence import save_run
 from blackjack_rl.schedules import KINDS
-from blackjack_rl.training.deep_q import train_dqn
-from blackjack_rl.training.exploring_starts_dqn import train_dqn_es
+from blackjack_rl.dqn.deep_q import train_dqn
+from blackjack_rl.dqn.exploring_starts_dqn import train_dqn_es
 from blackjack_rl.util import format_duration
 
 DEFAULT_RUNS_DIR = Path(__file__).resolve().parent.parent / "runs"

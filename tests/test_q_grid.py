@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import torch
 
-from blackjack_rl.agents.dqn import DQNAgent
-from blackjack_rl.training.deep_q import full_q_grid
+from blackjack_rl.dqn.agent import DQNAgent
+from blackjack_rl.dqn.deep_q import full_q_grid
 
 
 def test_full_q_grid_covers_all_cells() -> None:

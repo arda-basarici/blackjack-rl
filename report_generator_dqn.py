@@ -378,7 +378,7 @@ def chart_embedding():
     Columns: one-hot | scalar. Needs torch + sklearn; returns None (figure skipped) if absent, so the build
     never breaks."""
     try:
-        from blackjack_rl.evaluation.embedding import load_agent, cell_embeddings
+        from blackjack_rl.dqn.embedding import load_agent, cell_embeddings
         from sklearn.decomposition import PCA
         from sklearn.manifold import TSNE
     except Exception as e:

@@ -13,7 +13,7 @@ import torch
 
 from simulator.game_state import GameState
 
-from blackjack_rl.agents.dqn import DQNAgent, QNetwork, encode_features
+from blackjack_rl.dqn.agent import DQNAgent, QNetwork, encode_features
 
 
 def _state(**kw) -> GameState:

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import torch
 
-from blackjack_rl.agents.dqn import DQNAgent, QNetwork
+from blackjack_rl.dqn.agent import DQNAgent, QNetwork
 from blackjack_rl.config import DQNConfig
-from blackjack_rl.evaluation.network_diff import _state_for
-from blackjack_rl.training.deep_q import td_target
-from blackjack_rl.training.replay import Batch
+from blackjack_rl.dqn.network_diff import _state_for
+from blackjack_rl.dqn.deep_q import td_target
+from blackjack_rl.dqn.replay import Batch
 
 
 def test_gate_removes_double_from_legal_actions() -> None:
@@ -57,7 +57,7 @@ def test_double_after_config_validation() -> None:
 
 
 def test_stage_one_only_run_never_doubles(tmp_path) -> None:
-    from blackjack_rl.dqn_experiment import run_dqn
+    from blackjack_rl.dqn.experiment import run_dqn
 
     cfg = DQNConfig(num_episodes=300, double_after=10_000, warmup=10, batch_size=8,
                     buffer_capacity=500, encoding="onehot", seed=0)
@@ -67,7 +67,7 @@ def test_stage_one_only_run_never_doubles(tmp_path) -> None:
 
 
 def test_replay_buffer_clear_resets_and_is_reusable() -> None:
-    from blackjack_rl.training.replay import ReplayBuffer, Transition
+    from blackjack_rl.dqn.replay import ReplayBuffer, Transition
 
     def _t() -> Transition:
         return Transition(state=torch.zeros(4), action=0, reward=0.0, next_state=torch.zeros(4),
@@ -95,7 +95,7 @@ def test_clear_buffer_on_double_config_validation() -> None:
 def test_clear_buffer_on_double_drops_backlog() -> None:
     """At the double switch the buffer is flushed, so shortly after it carries far fewer
     transitions than the un-cleared run that keeps its whole hit/stand backlog."""
-    from blackjack_rl.training.deep_q import train_dqn
+    from blackjack_rl.dqn.deep_q import train_dqn
 
     def buffer_after_switch(clear: bool) -> int:
         curve: list[dict] = []
