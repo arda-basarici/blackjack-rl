@@ -6,7 +6,7 @@ of the blackjack project — replacing the lookup table with a DQN and watching 
 
 Numbers policy (read this before editing a figure):
   * The headline SCOREBOARD numbers (agreement %, edge %) are the audited values rendered by the
-    chapter notebooks (analysis/ch1_result.ipynb, ch6_complete_game.ipynb) and the millions-of-hands
+    chapter notebooks (analysis/dqn/chapters/ch1_result.ipynb, ch6_complete_game.ipynb) and the millions-of-hands
     re-evaluation in reeval_results.json. They are pinned here as sourced constants (see DATA below)
     so the report can never silently drift from the notebooks.
   * The illustrative FIGURES (Q-trajectories, instability map, encoding grids, peak-vs-back-half,

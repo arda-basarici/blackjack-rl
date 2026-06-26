@@ -19,9 +19,9 @@ for f in CHAPTERS:
     print(f"exporting {f} ...")
     subprocess.run(
         [sys.executable, "-m", "jupyter", "nbconvert", "--to", "html",
-         "--output-dir", "analysis", f"analysis/{f}.ipynb"],
+         "--output-dir", "analysis/html", f"analysis/dqn/chapters/{f}.ipynb"],
         check=True,
     )
 
-out = concat_notebook_html([f"analysis/{f}.html" for f in CHAPTERS], "analysis/report_full.html")
+out = concat_notebook_html([f"analysis/html/{f}.html" for f in CHAPTERS], "analysis/html/report_full.html")
 print(f"\nwrote {out}")

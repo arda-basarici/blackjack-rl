@@ -19,7 +19,7 @@ for f in CHAPTERS:
     print(f"restart + run-all + save: {f} ...")
     subprocess.run(
         [sys.executable, "-m", "jupyter", "nbconvert", "--to", "notebook", "--execute",
-         "--inplace", "--ExecutePreprocessor.timeout=900", f"analysis/{f}.ipynb"],
+         "--inplace", "--ExecutePreprocessor.timeout=900", f"analysis/dqn/chapters/{f}.ipynb"],
         check=True,
     )
 print("\ndone — all notebooks executed on a fresh kernel and saved with outputs")
