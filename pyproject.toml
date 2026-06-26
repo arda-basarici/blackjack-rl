@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff", "mypy", "pyright"]
+dev = ["pytest", "ruff", "pyright"]
 # For the analysis notebooks in analysis/ (policy investigation, heatmaps, embedding/PCA).
 analysis = ["pandas", "matplotlib", "ipykernel", "scikit-learn"]
 report = ["seaborn", "reportlab", "nbconvert"]
@@ -31,8 +31,5 @@ include = ["blackjack_rl*"]
 [tool.ruff]
 line-length = 100
 
-[tool.mypy]
-python_version = "3.13"
-ignore_missing_imports = true
-
+# Type checking is Pyright only (one engine for editor + CLI). Config in pyrightconfig.json.
 

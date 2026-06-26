@@ -7,7 +7,8 @@ holds the B-specific code and reuses what's below it:
 - dqn/   — QNetwork and the (count-aware) play agent.
 
 Built **bet-first** (B0 → B6). Planned extensions to shared files, made when their stage lands:
-- SessionConfig — stubbed here in env.py for now; consider moving to core/config.py at B0
-  (it is the *third* config, the documented trigger to revisit config organization).
+- SessionConfig — **kept in env.py** (decided at B0): it is the env/MDP config (bankroll, ruin,
+  bet spread, horizon), so it lives with the env, exactly as ``problem_a_config`` lives in core.env;
+  core.config holds *training* hyperparameters, a different concern.
 - dqn/agent.py — optional count features for the count-aware play model, added at B3.
 """
