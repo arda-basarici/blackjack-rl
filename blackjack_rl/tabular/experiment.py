@@ -27,7 +27,7 @@ from blackjack_rl.core.persistence import save_run
 from blackjack_rl.tabular.monte_carlo import train
 from blackjack_rl.core.util import format_duration
 
-DEFAULT_RUNS_DIR = Path(__file__).resolve().parent.parent / "runs"
+DEFAULT_RUNS_DIR = Path(__file__).resolve().parent.parent.parent / "runs"
 
 
 @dataclass(frozen=True)

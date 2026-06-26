@@ -8,7 +8,7 @@ are here; other tables present edge as a trend or already-banded, so they don't 
 
 Run from the repo root (needs torch + the Phase-2 simulator on the path, same as a normal run):
 
-    python reeval_edges.py
+    python scripts/reeval_edges.py
 
 Tune EVAL_HANDS for precision/runtime (SE ~ 1.15/sqrt(N)): 2M ~0.08%, 3M ~0.07%, 5M ~0.05%.
 """

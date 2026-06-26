@@ -4,7 +4,7 @@ Equivalent to opening each notebook, "Restart Kernel and Run All", and saving: i
 notebook on a fresh kernel and writes the outputs back INTO the .ipynb (in place). Run this whenever
 the data or code changed (e.g. after the reeval fold-in), then export with make_report.py.
 
-Run from the repo root:   python run_notebooks.py
+Run from the repo root:   python scripts/run_notebooks.py
 Needs the normal env (torch + the Phase-2 simulator on the path, jupyter/nbconvert).
 """
 import subprocess

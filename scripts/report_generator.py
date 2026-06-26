@@ -8,8 +8,8 @@ cannot drift out of sync. Policy-level numbers come straight from each run's dif
 (deterministic); the house-edge ledger is re-evaluated through the engine and cached.
 
 Usage:
-    python report_generator.py                 # 1M-hand ledger eval (slow first build, cached after)
-    python report_generator.py --eval-hands 50000   # quick iteration
+    python scripts/report_generator.py                 # 1M-hand ledger eval (slow first build, cached after)
+    python scripts/report_generator.py --eval-hands 50000   # quick iteration
 
 Output:
     blackjack-rl-policy-audit.pdf   (+ report_charts/)

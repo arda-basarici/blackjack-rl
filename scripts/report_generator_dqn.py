@@ -13,7 +13,7 @@ Numbers policy (read this before editing a figure):
     capacity, game comparison) are computed LIVE from the saved run records in runs/ — single-run
     mechanism plots, honest to the data on disk.
 
-Run from the repo root:  python report_generator_dqn.py
+Run from the repo root:  python scripts/report_generator_dqn.py
 Needs: reportlab, seaborn, matplotlib, pandas, numpy (no torch — nothing is re-trained or re-evaluated).
 """
 from __future__ import annotations

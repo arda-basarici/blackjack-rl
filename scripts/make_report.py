@@ -1,9 +1,9 @@
 """Export the (already-run) chapter notebooks to HTML and concatenate into one report_full.html.
 
-Run `python run_notebooks.py` FIRST so the notebooks carry fresh outputs; this step does not execute
+Run `python scripts/run_notebooks.py` FIRST so the notebooks carry fresh outputs; this step does not execute
 them, it just exports the saved outputs — fast and deterministic.
 
-Run from the repo root:   python make_report.py
+Run from the repo root:   python scripts/make_report.py
 """
 import subprocess
 import sys

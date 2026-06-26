@@ -4,7 +4,7 @@
 #
 # Usage (from blackjack-rl/, with the Phase-3 venv active):
 #     .\.venv\Scripts\Activate.ps1
-#     .\overnight_sweep.ps1
+#     .\scripts\overnight_sweep.ps1
 #
 # Notes:
 # - 1,000,000 episodes per run: agreement plateaus by ~500k (flat 300k->2M in every run so far),
