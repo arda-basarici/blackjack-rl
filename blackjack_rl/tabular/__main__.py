@@ -1,7 +1,7 @@
 """CLI: train a tabular MC blackjack agent, evaluate it, and save the run.
 
-    python -m blackjack_rl --episodes 5000000 --seed 42
-    python -m blackjack_rl --episodes 5000000 --epsilon-schedule linear \
+    python -m blackjack_rl.tabular --episodes 5000000 --seed 42
+    python -m blackjack_rl.tabular --episodes 5000000 --epsilon-schedule linear \
         --epsilon-start 0.3 --epsilon-end 0.0 --step-size 0.02
 """
 from __future__ import annotations
@@ -10,7 +10,7 @@ import argparse
 from pathlib import Path
 
 from blackjack_rl.config import ExperimentConfig
-from blackjack_rl.experiment import run_experiment
+from blackjack_rl.tabular.experiment import run_experiment
 from blackjack_rl.schedules import KINDS
 
 

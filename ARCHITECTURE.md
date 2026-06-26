@@ -116,7 +116,7 @@ experiment. *Empirical verdict.* Across configs the agent rediscovers ~93-95% of
 ### A9 — Saved runs are self-contained, re-loadable, comparable
 Each run's record carries the full Q-table and visit counts (D8 / D10), so `load_agent`
 rebuilds the trained policy from a record with **no retraining**. This enables re-evaluating a
-policy at more hands or other seeds for a tighter CI (`python -m blackjack_rl.evaluate`), and
+policy at more hands or other seeds for a tighter CI (`python -m blackjack_rl.tabular.evaluate`), and
 comparing variants by reading their records (the investigation notebook's experiment ledger).
 Re-evaluation recomputes only the *edge*; fidelity (agreement / categories) is a property of
 the policy and is read straight from the record.

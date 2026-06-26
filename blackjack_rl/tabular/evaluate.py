@@ -1,6 +1,6 @@
 """CLI: re-evaluate a saved run's policy over more hands, without retraining.
 
-    python -m blackjack_rl.evaluate --run runs/<dir> --hands 1000000 --seed 0
+    python -m blackjack_rl.tabular.evaluate --run runs/<dir> --hands 1000000 --seed 0
 
 The trained policy lives in the saved record's qtable, so this loads it and measures the
 greedy house edge (and basic strategy on the same shuffles) at whatever sample size you want.
@@ -15,7 +15,7 @@ import time
 from strategies.basic_strategy import BasicStrategy
 
 from blackjack_rl.evaluation.metrics import GreedyPolicy, evaluate_policy
-from blackjack_rl.experiment import load_agent
+from blackjack_rl.tabular.experiment import load_agent
 from blackjack_rl.persistence import load_record
 from blackjack_rl.util import format_duration
 

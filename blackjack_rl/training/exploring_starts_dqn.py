@@ -40,7 +40,7 @@ from blackjack_rl.training.deep_q import (
     sync_target,
     td_update,
 )
-from blackjack_rl.training.exploring_starts import (
+from blackjack_rl.tabular.exploring_starts import (
     ForcedFirstAction,
     PreparedDeck,
     StartSpec,

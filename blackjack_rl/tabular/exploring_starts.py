@@ -24,11 +24,11 @@ from simulator.hand_simulator import HandSimulator
 
 from strategies.base import Strategy
 
-from blackjack_rl.agents.tabular import TabularAgent
+from blackjack_rl.tabular.agent import TabularAgent
 from blackjack_rl.config import ExperimentConfig
 from blackjack_rl.env import Episode, problem_a_config
 from blackjack_rl.state import StateKey, encode_state
-from blackjack_rl.training.monte_carlo import (
+from blackjack_rl.tabular.monte_carlo import (
     _apply_episode,
     _greedy_table,
     _min_state_visits,
@@ -240,7 +240,7 @@ from strategies.basic_strategy import BasicStrategy
 
 from blackjack_rl.evaluation.metrics import GreedyPolicy, evaluate_policy
 from blackjack_rl.evaluation.policy_diff import diff_policy
-from blackjack_rl.experiment import DEFAULT_RUNS_DIR, RunResult, _qtable_records
+from blackjack_rl.tabular.experiment import DEFAULT_RUNS_DIR, RunResult, _qtable_records
 from blackjack_rl.persistence import save_run
 
 

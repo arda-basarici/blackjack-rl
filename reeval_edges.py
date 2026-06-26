@@ -20,7 +20,7 @@ from pathlib import Path
 
 from strategies.basic_strategy import BasicStrategy
 
-from blackjack_rl.agents.tabular import TabularAgent
+from blackjack_rl.tabular.agent import TabularAgent
 from blackjack_rl.env import problem_a_config
 from blackjack_rl.evaluation.metrics import GreedyPolicy, evaluate_policy
 

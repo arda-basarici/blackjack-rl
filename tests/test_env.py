@@ -8,7 +8,7 @@ import random
 
 from strategies.basic_strategy import BasicStrategy
 from simulator.game_state import Action
-from blackjack_rl.agents.tabular import TabularAgent
+from blackjack_rl.tabular.agent import TabularAgent
 from blackjack_rl.env import Episode, rollout_many
 
 _LEGAL: set[Action] = {"hit", "stand", "double", "split", "surrender"}

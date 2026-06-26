@@ -1,13 +1,13 @@
-"""Tests for blackjack_rl.training.monte_carlo — mechanics only.
+"""Tests for blackjack_rl.tabular.monte_carlo — mechanics only.
 
 Whether the agent learns *good blackjack* is validated in the evaluation sub-unit, not here.
 These check credit assignment (per-step returns), determinism, the learning curve, and that
 splits train.
 """
-from blackjack_rl.agents.tabular import TabularAgent
+from blackjack_rl.tabular.agent import TabularAgent
 from blackjack_rl.config import ExperimentConfig
 from blackjack_rl.env import Episode
-from blackjack_rl.training.monte_carlo import _apply_episode, train
+from blackjack_rl.tabular.monte_carlo import _apply_episode, train
 
 
 def test_apply_episode_applies_each_step_return() -> None:

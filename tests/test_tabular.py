@@ -1,8 +1,8 @@
-"""Tests for blackjack_rl.agents.tabular — the Q-table policy."""
+"""Tests for blackjack_rl.tabular.agent — the Q-table policy."""
 import random
 
 from simulator.game_state import GameState
-from blackjack_rl.agents.tabular import TabularAgent
+from blackjack_rl.tabular.agent import TabularAgent
 from blackjack_rl.state import encode_state
 
 _STAGE2 = {"hit", "stand", "double"}

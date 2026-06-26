@@ -3,7 +3,7 @@ import pytest
 
 from blackjack_rl.config import ExperimentConfig
 from blackjack_rl.schedules import make_epsilon_schedule
-from blackjack_rl.training.monte_carlo import train
+from blackjack_rl.tabular.monte_carlo import train
 
 
 def test_constant_is_flat() -> None:

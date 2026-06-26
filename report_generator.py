@@ -99,7 +99,7 @@ def load_runs():
 
 def edge_ledger(runs, hands):
     cache = json.load(open(CACHE)) if os.path.exists(CACHE) else {}
-    from blackjack_rl.experiment import load_agent
+    from blackjack_rl.tabular.experiment import load_agent
     from blackjack_rl.evaluation.metrics import evaluate_policy, GreedyPolicy
     from strategies.basic_strategy import BasicStrategy
 

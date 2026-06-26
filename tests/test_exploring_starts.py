@@ -8,7 +8,7 @@ from simulator.game_state import Action, GameState
 from strategies.base import Strategy
 
 from blackjack_rl.env import problem_a_config
-from blackjack_rl.training.exploring_starts import (
+from blackjack_rl.tabular.exploring_starts import (
     ForcedFirstAction,
     PreparedDeck,
     card_of_value,

@@ -1,8 +1,8 @@
 """Tests for the exploring-starts enumeration, rollout, and training loop (MC-ES control)."""
 from blackjack_rl.config import ExperimentConfig
 from blackjack_rl.env import problem_a_config
-from blackjack_rl.agents.tabular import TabularAgent
-from blackjack_rl.training.exploring_starts import (
+from blackjack_rl.tabular.agent import TabularAgent
+from blackjack_rl.tabular.exploring_starts import (
     enumerate_start_pairs,
     es_rollout,
     train_exploring_starts,
@@ -59,7 +59,7 @@ def test_training_covers_every_start_state() -> None:
 
 def test_run_exploring_starts_saves_record(tmp_path) -> None:
     import json
-    from blackjack_rl.training.exploring_starts import run_exploring_starts
+    from blackjack_rl.tabular.exploring_starts import run_exploring_starts
     cfg = ExperimentConfig(num_episodes=500, epsilon=0.0, step_size=0.001, with_splits=True, seed=42)
     result = run_exploring_starts(cfg, eval_hands=500, eval_seed=0, runs_dir=tmp_path)
     assert result.run_dir.exists()

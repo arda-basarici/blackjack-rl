@@ -1,8 +1,8 @@
-"""Tests for blackjack_rl.experiment — orchestration mechanics on a tiny config."""
+"""Tests for blackjack_rl.tabular.experiment — orchestration mechanics on a tiny config."""
 import json
 
 from blackjack_rl.config import ExperimentConfig
-from blackjack_rl.experiment import RunResult, run_experiment
+from blackjack_rl.tabular.experiment import RunResult, run_experiment
 
 
 def test_run_experiment_writes_full_record(tmp_path) -> None:

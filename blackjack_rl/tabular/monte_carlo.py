@@ -19,7 +19,7 @@ from typing import Callable
 
 from simulator.game_state import Action
 
-from blackjack_rl.agents.tabular import TabularAgent
+from blackjack_rl.tabular.agent import TabularAgent
 from blackjack_rl.config import ExperimentConfig
 from blackjack_rl.env import Episode, problem_a_config, rollout
 from blackjack_rl.schedules import make_epsilon_schedule

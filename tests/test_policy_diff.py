@@ -1,5 +1,5 @@
 """Tests for blackjack_rl.evaluation.policy_diff."""
-from blackjack_rl.agents.tabular import TabularAgent
+from blackjack_rl.tabular.agent import TabularAgent
 from blackjack_rl.evaluation.policy_diff import _canonical_state, classify, diff_policy
 from strategies.basic_strategy import BasicStrategy
 

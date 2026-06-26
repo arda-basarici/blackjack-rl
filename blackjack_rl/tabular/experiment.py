@@ -19,12 +19,12 @@ from typing import Any
 
 from strategies.basic_strategy import BasicStrategy
 
-from blackjack_rl.agents.tabular import TabularAgent
+from blackjack_rl.tabular.agent import TabularAgent
 from blackjack_rl.config import ExperimentConfig
 from blackjack_rl.evaluation.metrics import EdgeResult, GreedyPolicy, evaluate_policy
 from blackjack_rl.evaluation.policy_diff import DiffReport, diff_policy
 from blackjack_rl.persistence import save_run
-from blackjack_rl.training.monte_carlo import train
+from blackjack_rl.tabular.monte_carlo import train
 from blackjack_rl.util import format_duration
 
 DEFAULT_RUNS_DIR = Path(__file__).resolve().parent.parent / "runs"
