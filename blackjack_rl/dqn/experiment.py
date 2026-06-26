@@ -33,9 +33,7 @@ from blackjack_rl.core.schedules import KINDS
 from blackjack_rl.dqn.deep_q import train_dqn
 from blackjack_rl.dqn.exploring_starts_dqn import train_dqn_es
 from blackjack_rl.core.util import format_duration
-
-DEFAULT_RUNS_DIR = Path(__file__).resolve().parent.parent.parent / "runs"
-DEFAULT_LOGS_DIR = Path(__file__).resolve().parent.parent.parent / "logs"
+from blackjack_rl.core.paths import RUNS_DIR as DEFAULT_RUNS_DIR, LOGS_DIR as DEFAULT_LOGS_DIR
 
 
 class _Tee:

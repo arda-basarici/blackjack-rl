@@ -33,9 +33,6 @@ from blackjack_rl.core.state import StateLike
 # policy-diff treat them identically). Split is offered only with_splits; surrender is off in
 # problem_a_config. double/split are only ever *selected* when the state actually allows them
 # (handled by masking, below).
-_STAGE2_ACTIONS: tuple[Action, ...] = ("hit", "stand", "double")
-_SPLIT_ACTIONS: tuple[Action, ...] = ("hit", "stand", "double", "split")
-
 _NEG_INF = float("-inf")
 
 

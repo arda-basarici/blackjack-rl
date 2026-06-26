@@ -37,6 +37,7 @@ def load_agent(run_dir: Path | str) -> DQNAgent:
     agent = DQNAgent(
         epsilon=0.0,
         with_splits=bool(cfg.get("with_splits", False)),
+        with_surrender=bool(cfg.get("with_surrender", False)),
         hidden=tuple(cfg.get("hidden", (64, 64))),
         encoding=cfg.get("encoding", "scalar"),
     )

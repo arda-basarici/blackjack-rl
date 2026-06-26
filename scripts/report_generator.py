@@ -353,12 +353,9 @@ def build_pdf(C, M):
     take  = ParagraphStyle("Take", fontSize=10.5, leading=14, textColor=HexColor("#455A64"), fontName="Helvetica-Oblique", spaceBefore=1, spaceAfter=9)
     boxh  = ParagraphStyle("BoxH", fontSize=12, leading=16, textColor=C_ACCENT, fontName="Helvetica-Bold", spaceAfter=5)
     boxb  = ParagraphStyle("BoxB", fontSize=9.5, leading=14, textColor=C_INK, fontName="Helvetica", spaceAfter=4)
-    th    = ParagraphStyle("th", fontSize=9.5, leading=12, textColor=white, fontName="Helvetica-Bold")
-    tc    = ParagraphStyle("tc", fontSize=9, leading=12, textColor=C_INK, fontName="Helvetica")
 
     story = []
     from reportlab.lib.utils import ImageReader
-    from reportlab.platypus import KeepTogether
     def P(t, s=body): story.append(Paragraph(t, s))
     def fig(key, caption, width=None):
         if width is None:

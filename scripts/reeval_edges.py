@@ -43,32 +43,16 @@ POLICIES = [
 
 
 def load_tabular(run_dir: str) -> TabularAgent:
-    """Rebuild a TabularAgent from the qtable in its record (faithful: greedy_action argmaxes over the
-    LEGAL actions with these stored Q-values, mask included)."""
+    """Rebuild a TabularAgent from the qtable in its saved record via the canonical loader."""
+    from blackjack_rl.tabular.experiment import load_agent
     rec = json.loads((RUNS / run_dir / "record.json").read_text(encoding="utf-8"))
-    ws = bool(rec["config"].get("with_splits", False))
-    agent = TabularAgent(epsilon=0.0, with_splits=ws)
-    for e in rec["qtable"]:                              # keys match blackjack_rl.core.state.encode_state
-        base = (e["player_value"], e["is_soft"], e["dealer_upcard"])
-        agent.q[((*base, e["can_split"]) if ws else base, e["action"])] = e["q"]
-    return agent
+    return load_agent(rec, epsilon=0.0)
 
 
 def load_dqn(run_dir: str):
-    """Reload a trained DQN, passing BOTH with_splits AND with_surrender from the config so the net's
-    action head matches the checkpoint (the repo's load_agent omits with_surrender -> 4 vs 5 action
-    size-mismatch on complete-game runs)."""
-    import torch
-    from blackjack_rl.dqn.agent import DQNAgent
-    cfg = json.loads((RUNS / run_dir / "record.json").read_text(encoding="utf-8"))["config"]
-    agent = DQNAgent(epsilon=0.0,
-                     with_splits=bool(cfg.get("with_splits", False)),
-                     with_surrender=bool(cfg.get("with_surrender", False)),
-                     hidden=tuple(cfg.get("hidden", (64, 64))),
-                     encoding=cfg.get("encoding", "scalar"))
-    agent.q_net.load_state_dict(torch.load(RUNS / run_dir / "model.pt", map_location="cpu"))
-    agent.q_net.eval()
-    return agent
+    """Reload a trained DQN from its run directory via the canonical loader (with_surrender-aware)."""
+    from blackjack_rl.dqn.embedding import load_agent
+    return load_agent(RUNS / run_dir)
 
 
 def make_policy(kind: str, run_dir: str | None):

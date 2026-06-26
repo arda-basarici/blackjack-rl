@@ -26,8 +26,7 @@ from blackjack_rl.evaluation.policy_diff import DiffReport, diff_policy
 from blackjack_rl.core.persistence import save_run
 from blackjack_rl.tabular.monte_carlo import train
 from blackjack_rl.core.util import format_duration
-
-DEFAULT_RUNS_DIR = Path(__file__).resolve().parent.parent.parent / "runs"
+from blackjack_rl.core.paths import RUNS_DIR as DEFAULT_RUNS_DIR
 
 
 @dataclass(frozen=True)
@@ -130,6 +129,7 @@ def run_experiment(
 
     record = {
         "config": asdict(config),
+        "method": "tabular",
         "eval": {"hands": eval_hands, "seed": eval_seed},
         "timing": {
             "started_at": started.isoformat(timespec="seconds"),
