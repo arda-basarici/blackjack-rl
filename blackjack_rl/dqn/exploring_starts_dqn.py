@@ -196,7 +196,7 @@ def train_dqn_es(
                     cp["q_grid"] = full_q_grid(agent)
                 on_checkpoint(cp)
             loss_sum, loss_count = 0.0, 0
-    if config.swa and swa_n:  # evaluate the time-averaged weights, not the final snapshot
+    if config.swa and swa_sum is not None:  # evaluate the time-averaged weights, not the final snapshot
         agent.q_net.load_state_dict({k: v / swa_n for k, v in swa_sum.items()})
     agent.sample_counts = counts
     return agent

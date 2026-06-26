@@ -15,12 +15,21 @@ from typing import Protocol
 
 
 class StateLike(Protocol):
-    """Anything carrying the fields a state key needs — e.g. a GameState or a DecisionRecord."""
+    """Anything carrying the fields a state key needs — e.g. a GameState or a DecisionRecord.
 
-    player_value: int
-    player_is_soft: bool
-    dealer_upcard: int
-    can_split: bool
+    Members are read-only (property form): encoding only *reads* these fields, so a read-only
+    protocol is both honest and satisfiable by frozen sources (e.g. the ``frozen=True`` ``Step``)
+    as well as the engine's mutable ``GameState``/``DecisionRecord``.
+    """
+
+    @property
+    def player_value(self) -> int: ...
+    @property
+    def player_is_soft(self) -> bool: ...
+    @property
+    def dealer_upcard(self) -> int: ...
+    @property
+    def can_split(self) -> bool: ...
 
 
 # Hashable key into the Q-table / visit-count tables: a 3-tuple in no-split mode, with a

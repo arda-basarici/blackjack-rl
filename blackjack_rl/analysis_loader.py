@@ -14,8 +14,13 @@ from pathlib import Path
 
 import pandas as pd
 
-# repo root = the dir containing runs/
-ROOT = next(p for p in [Path.cwd(), *Path.cwd().parents] if (p / "runs").is_dir())
+# repo root = the dir containing runs/. Walk up from cwd (so notebooks run from any subdir resolve
+# it); fall back to this package's project root when no runs/ ancestor exists, so importing this
+# module never crashes when artifacts are absent (fresh checkout, CI, pdoc importing every module).
+ROOT = next(
+    (p for p in [Path.cwd(), *Path.cwd().parents] if (p / "runs").is_dir()),
+    Path(__file__).resolve().parents[1],
+)
 
 # --- corrected edge benchmark (audit) ---------------------------------------------------------
 # A run's saved ``basic_edge_pct`` is ONE eval_seed=0, 200k-hand sample (per-hand reward SD ~1.15

@@ -13,6 +13,9 @@ runs/*
 report_charts/
 report_charts_dqn/
 
+# auto-generated API reference (scripts/make_docs.py) — regenerated, never hand-edited
+docs/
+
 # DQN training logs (tee'd terminal output) — local only, like runs/
 logs/
 

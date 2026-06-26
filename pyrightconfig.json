@@ -2,5 +2,30 @@
   "venvPath": ".",
   "venv": ".venv",
   "pythonVersion": "3.13",
-  "extraPaths": [".", "../../phase2-data/blackjack-sim"]
+  "extraPaths": [".", "../../phase2-data/blackjack-sim"],
+
+  "//": "Library code (blackjack_rl/) is type-checked at full standard strictness. tests/ and",
+  "//1": "scripts/ legitimately use loose values — test doubles (a minimal _ConstQ for QNetwork,",
+  "//2": "int for bool kwargs) and one-off report scripts gluing untyped libs (reportlab, matplotlib,",
+  "//3": "pandas). We silence ONLY the strictness rules those trip, per-tree, so import-resolution,",
+  "//4": "undefined-name, and (in tests) attribute-typo checks stay live. See SESSION_LOG 2026-06-26.",
+  "executionEnvironments": [
+    {
+      "root": "tests",
+      "extraPaths": [".", "../../phase2-data/blackjack-sim"],
+      "reportArgumentType": "none",
+      "reportCallIssue": "none",
+      "reportReturnType": "none"
+    },
+    {
+      "root": "scripts",
+      "extraPaths": [".", "../../phase2-data/blackjack-sim"],
+      "reportArgumentType": "none",
+      "reportCallIssue": "none",
+      "reportReturnType": "none",
+      "reportGeneralTypeIssues": "none",
+      "reportAttributeAccessIssue": "none",
+      "reportPrivateImportUsage": "none"
+    }
+  ]
 }

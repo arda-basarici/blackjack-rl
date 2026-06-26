@@ -14,10 +14,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff", "mypy"]
+dev = ["pytest", "ruff", "mypy", "pyright"]
 # For the analysis notebooks in analysis/ (policy investigation, heatmaps, embedding/PCA).
 analysis = ["pandas", "matplotlib", "ipykernel", "scikit-learn"]
 report = ["seaborn", "reportlab", "nbconvert"]
+# Auto-generated API reference (scripts/make_docs.py). pdoc imports the package, never hand-written.
+docs = ["pdoc"]
 
 # The Phase 2 engine is consumed via an editable install, not a declared dependency:
 #   pip install -e ../../phase2-data/blackjack-sim
