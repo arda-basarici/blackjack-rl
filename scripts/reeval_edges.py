@@ -81,9 +81,10 @@ def make_policy(kind: str, run_dir: str | None):
 
 def _save(results) -> None:
     """Persist results after EVERY policy, so a mid-run crash keeps what finished (the lesson, applied)."""
-    Path("reeval_results.json").write_text(
+    Path("results").mkdir(exist_ok=True)
+    Path("results/reeval_results.json").write_text(
         json.dumps({"eval_hands": EVAL_HANDS, "seed": SEED, "results": results}, indent=2), encoding="utf-8")
-    with open("reeval_results.txt", "w", encoding="utf-8") as f:
+    with open("results/reeval_results.txt", "w", encoding="utf-8") as f:
         f.write("re-eval over %d hands, seed %d\n\n" % (EVAL_HANDS, SEED))
         for r in results:
             f.write("%-30s edge = %7.3f%%  +/- %.3f%%\n" % (r["policy"], r["edge_pct"], r["se_pct"])
@@ -95,8 +96,8 @@ def main() -> None:
     # RESUME: keep any policy already saved with a value, and skip re-running it. So a re-run only does
     # what's missing/failed — re-running after a crash (or to add the fixed complete-game runs) is cheap.
     cached = {}
-    if Path("reeval_results.json").exists():
-        for r in json.loads(Path("reeval_results.json").read_text(encoding="utf-8")).get("results", []):
+    if Path("results/reeval_results.json").exists():
+        for r in json.loads(Path("results/reeval_results.json").read_text(encoding="utf-8")).get("results", []):
             if r.get("edge_pct") is not None:
                 cached[r["policy"]] = r
     results = []
@@ -115,7 +116,7 @@ def main() -> None:
             print("%-30s FAILED: %s: %s" % (label, type(ex).__name__, ex))
             results.append({"policy": label, "run": run_dir, "error": "%s: %s" % (type(ex).__name__, ex)})
         _save(results)   # write after each policy
-    print("\nsaved -> reeval_results.json / reeval_results.txt")
+    print("\nsaved -> results/reeval_results.json / results/reeval_results.txt")
 
 
 if __name__ == "__main__":

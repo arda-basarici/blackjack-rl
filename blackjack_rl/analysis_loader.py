@@ -35,7 +35,7 @@ def reeval_edges() -> dict:
     """Tight re-evaluated edges (%/hand) from ``reeval_results.json`` (written by ``reeval_edges.py`` over
     millions of hands), keyed by BOTH policy label and run-id. Returns ``{}`` until that file exists, so a
     scoreboard cleanly falls back to the recorded 200k edge in the meantime — no hardcoded numbers."""
-    p = ROOT / "reeval_results.json"
+    p = ROOT / "results" / "reeval_results.json"
     out = {}
     try:
         data = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
