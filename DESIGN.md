@@ -1,7 +1,7 @@
 # Blackjack RL — Design Document
 
-> **Status:** draft, pre-implementation · **Phase:** 3 (PyTorch & Deep Learning) ·
-> **Last updated:** 2026-06-16
+> **Status:** living · A complete (tabular + DQN, reported), B designed · **Phase:** 3 (PyTorch & Deep Learning) ·
+> **Last updated:** 2026-06-26
 >
 > This document is written *before* the code, on purpose. It is the design we agreed
 > on, the reasoning behind each choice, and the staged plan we'll build against. Like
@@ -215,6 +215,66 @@ of truth (no vendored copy to drift) and makes the P2→P3 dependency explicit i
 which is the continuity thread made real. Cost, accepted: `blackjack-rl` is not standalone
 — it requires the sibling project present (expected in a monorepo).
 
+*Problem B decisions (added 2026-06-26, the methods-design session). They sit on the A/B split
+of §3 and the MDP note of §4.*
+
+**D11 — Problem B objective: maximize log-bankroll growth (Kelly); ruin-aware.** B has no clean
+optimum (§3) — the optimum is an EV-vs-ruin tradeoff and the reward encodes a risk preference we
+choose. We choose **expected log-growth** (the Kelly objective): per-hand reward is the log-wealth
+increment `log(W_after / W_before)`, so the return is `log(W_final / W_0)` and maximizing it *is*
+Kelly. Over-betting self-punishes in log, so the objective inherently balances growth against ruin.
+(Resolves the §10 "reward design" open question.)
+
+**D12 — Factored policy (play + bet), with a monolithic baseline.** Under log-growth, play and bet
+**separate**: optimal *play* maximizes per-hand EV (independent of bankroll), optimal *bet* is the
+Kelly fraction given the edge at the current count. So the primary agent is **factored** — a
+count-aware *play* model trained on EV (the Step-2 DQN + count) and a *bet* model trained on
+log-growth — which is the structure the objective hands us, not a convenience. Caveat to state: the
+separation is exact only in the small-bet limit; doubles/splits raise the mid-hand stake, coupling
+weakly to bankroll. We also build a **monolithic** end-to-end agent (one net, play+bet on
+log-growth) as a comparison baseline — the honest "does end-to-end learning recover the principled
+factoring?" question, reprising the A-vs-DQN arc.
+
+**D13 — B state: given count; bankroll only where ruin-awareness needs it.** We *feed* the engine's
+Hi-Lo `true_count` and `decks_remaining` (B restores the Markov property by folding them in, §4); the
+**bet** model also sees the **bankroll** (the ruin-aware optimum depends on it), while the **play**
+model does not (EV play is bankroll-independent). Learned-count — feed raw remaining-rank composition
+and let the agent discover its own statistic, *audited against Hi-Lo* — is **parked as an optional
+later stretch**, not in the core.
+
+**D14 — Finite-bankroll, ruin-aware MDP (the risk preference made concrete).** The session is a finite
+starting bankroll, bets in units, with a hard **ruin** barrier (terminal). This makes the optimum
+genuinely ruin-aware (bet *below* full Kelly near the barrier) — a richer, honest target than pure
+scale-free Kelly, and the learned agent doing so (diffed vs the analytic full-Kelly reference) is the
+headline auditable result. **Contingent encoding investigation** (mirrors the Step-2 encoding finding,
+CONCEPTS §21): build the naive finite-bankroll agent and observe; only if it struggles, vary the
+**bankroll encoding** (raw units → scale-free: fraction-of-initial / log-bankroll / units-above-min-bet)
+and report whether a better representation makes the ruin-aware policy learnable. Pursue only if the
+data calls for it — don't manufacture the finding.
+
+**D15 — Discrete bet spread (keep both heads value-based).** The bet action is a small configurable
+**spread** of unit bets (within table min/max). Value-based DQN selects by `argmax` over a finite
+Q-vector and bootstraps with `max_{a'} Q(s',a')` — both need an enumerable action set, so a
+*continuous* bet would force an actor-critic / policy-gradient method (a different learning rule) for
+one decision. Discretizing keeps **one method for both heads**, at ~zero resolution cost since real
+bets are discrete units. (General concept: CONCEPTS §29.)
+
+**D16 — B training & coverage: natural play default; coverage forcing contingent.** The play DQN
+generalizes over the *smooth* `true_count` input, so it interpolates the count-deviation trend without
+forced coverage of every extreme count — and Problem A already showed exploring-starts barely helped
+the *net* (a table needs each bucket visited; a net does not). Default = **natural session play**;
+**diagnose** extreme-count deviations against the known **index plays**; reach for
+stratified/exploring-starts coverage only if diagnosis shows starved or wrong deviations (reporting
+honestly if it underwhelms, as in A).
+
+**D17 — Evaluation for B: a baseline ladder + reconstructed references.** B has "no clean table" (§3),
+but we still audit against reconstructed ground truth: the analytic **full-Kelly bet curve** (from
+empirically-measured edge-by-count) and the known **index-play deviations**. Two axes: **outcome**
+(log-growth rate; final-bankroll distribution) and **risk** (probability of ruin — the natural headline
+for a finite bankroll — plus drawdown/variance). The **baseline ladder** attributes the edge:
+flat-bet + basic → Kelly-bet + basic (isolates the betting lever) → factored → monolithic. Rungs 1–2
+are cheap (fixed basic strategy + analytic betting), so the attribution is high value for low cost.
+
 ## 6. Signature deliverables & the finding
 
 **Deliverables.** A **policy-diff heatmap** — learned action vs. basic-strategy action per
@@ -265,8 +325,19 @@ this is Phase 3, not the flagship.
 5. **DQN** — PyTorch function approximation. Debuts **validated on Problem A** against the exact
    table (D4), then carried into B. (Also the MC-control -> deep-Q-learning switch — table->net
    and Monte-Carlo->TD at once; see D4.)
-6. **B · counting & betting** — the DQN deployed where clean ground truth ends (§3): new session
-   env, count state, bet-sizing, risk-sensitive objective.
+6. **B · counting & betting** — the DQN deployed where clean ground truth ends (§3); **bet-first**
+   sequence (see D11–D17), each sub-stage independently committable:
+   - **B0** session env + scaffolding (`problem_b_config`: counting on, shoe persists, ~75%
+     penetration; session-capture wrapper with bankroll + ruin; B-run persistence) — no engine changes.
+   - **B1** edge-by-count + analytic references (full-Kelly bet curve; index-play table).
+   - **B2** bet model — discrete spread on log-growth with fixed basic play → the classic
+     counting-bettor (most of the edge), audited vs the Kelly curve and flat-bet floor. **Core lands here.**
+   - **B3** count-aware play model (Step-2 DQN + count, EV, natural play; diagnose vs index plays)
+     → the factored system.
+   - **B4** monolithic baseline (end-to-end play+bet on log-growth) → factored-vs-monolithic comparison.
+   - **B5** contingent investigations (bankroll-encoding; stratified play coverage; learned-count
+     stretch) — only if the data calls.
+   - **B6** Problem-B report PDF.
 7. **Joint analysis + final writeup** — A, B, and the Phase 2 fixed strategies side by side.
 
 *Dropped — offline coverage study (former stage 4):* its "coverage governs the outcome" lesson
@@ -288,5 +359,9 @@ cells), it is not deep learning, and it is better revisited in the LLM phase (RL
   exist to guarantee rare cells get visited; decide at Stage 2.
 - DQN specifics (network size, replay, target-network cadence) — defer to Stage 5; keep
   the smallest thing that learns.
-- B's reward design — how explicitly the risk preference (EV vs. ruin) is encoded; this is
-  the crux of Stage 6 and the fuzziest decision in the project.
+- ~~B's reward design — how explicitly the risk preference (EV vs. ruin) is encoded.~~
+  **Resolved (2026-06-26):** log-bankroll growth (Kelly) on a finite-bankroll, ruin-aware MDP —
+  see D11, D14.
+- *New (B), to decide at implementation:* bet-spread granularity (number/size of levels);
+  bankroll encoding (only if the contingent study in D14 is triggered); penetration depth and
+  starting-bankroll size for the session env.

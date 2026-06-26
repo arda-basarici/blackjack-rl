@@ -16,5 +16,6 @@ report_charts_dqn/
 # DQN training logs (tee'd terminal output) — local only, like runs/
 logs/
 
-# private working notes for the report 
+# private working notes for the report
 REPORT_NOTES.md
+REPORT_NOTES_B.md
