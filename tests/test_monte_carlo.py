@@ -5,8 +5,8 @@ These check credit assignment (per-step returns), determinism, the learning curv
 splits train.
 """
 from blackjack_rl.tabular.agent import TabularAgent
-from blackjack_rl.config import ExperimentConfig
-from blackjack_rl.env import Episode
+from blackjack_rl.core.config import ExperimentConfig
+from blackjack_rl.core.env import Episode
 from blackjack_rl.tabular.monte_carlo import _apply_episode, train
 
 

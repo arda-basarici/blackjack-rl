@@ -5,7 +5,7 @@ from __future__ import annotations
 import torch
 
 from blackjack_rl.dqn.agent import DQNAgent
-from blackjack_rl.config import DQNConfig
+from blackjack_rl.core.config import DQNConfig
 from blackjack_rl.dqn.deep_q import train_dqn
 
 

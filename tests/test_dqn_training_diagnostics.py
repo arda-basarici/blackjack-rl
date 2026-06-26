@@ -2,7 +2,7 @@
 each learning-curve checkpoint carries an agreement-with-basic-strategy snapshot."""
 from __future__ import annotations
 
-from blackjack_rl.config import DQNConfig
+from blackjack_rl.core.config import DQNConfig
 from blackjack_rl.dqn.deep_q import train_dqn
 
 

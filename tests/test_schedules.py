@@ -1,8 +1,8 @@
-"""Tests for blackjack_rl.schedules."""
+"""Tests for blackjack_rl.core.schedules."""
 import pytest
 
-from blackjack_rl.config import ExperimentConfig
-from blackjack_rl.schedules import make_epsilon_schedule
+from blackjack_rl.core.config import ExperimentConfig
+from blackjack_rl.core.schedules import make_epsilon_schedule
 from blackjack_rl.tabular.monte_carlo import train
 
 

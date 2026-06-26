@@ -18,7 +18,7 @@ from simulator.game_state import Action, GameState
 from strategies.base import Strategy
 from strategies.basic_strategy import BasicStrategy
 
-from blackjack_rl.state import StateKey
+from blackjack_rl.core.state import StateKey
 
 Category = Literal["agree", "under_visited", "near_equal_ev", "genuine_disagreement"]
 

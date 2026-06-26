@@ -23,16 +23,16 @@ import torch
 from strategies.basic_strategy import BasicStrategy
 
 from blackjack_rl.dqn.agent import DQNAgent
-from blackjack_rl.config import DQNConfig
-from blackjack_rl.env import problem_a_config
+from blackjack_rl.core.config import DQNConfig
+from blackjack_rl.core.env import problem_a_config
 from blackjack_rl.evaluation.metrics import EdgeResult, GreedyPolicy, evaluate_policy
 from blackjack_rl.dqn.network_diff import diff_network
 from blackjack_rl.evaluation.policy_diff import DiffReport
-from blackjack_rl.persistence import save_run
-from blackjack_rl.schedules import KINDS
+from blackjack_rl.core.persistence import save_run
+from blackjack_rl.core.schedules import KINDS
 from blackjack_rl.dqn.deep_q import train_dqn
 from blackjack_rl.dqn.exploring_starts_dqn import train_dqn_es
-from blackjack_rl.util import format_duration
+from blackjack_rl.core.util import format_duration
 
 DEFAULT_RUNS_DIR = Path(__file__).resolve().parent.parent / "runs"
 DEFAULT_LOGS_DIR = Path(__file__).resolve().parent.parent / "logs"

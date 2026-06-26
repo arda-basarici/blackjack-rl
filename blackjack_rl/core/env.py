@@ -19,7 +19,7 @@ from simulator.game_state import Action
 from simulator.hand_simulator import HandSimulator
 from strategies.base import Strategy
 
-from blackjack_rl.state import StateKey, encode_state
+from blackjack_rl.core.state import StateKey, encode_state
 
 
 @dataclass

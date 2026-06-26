@@ -1,4 +1,4 @@
-"""Tests for blackjack_rl.env — the episode-capture wrapper.
+"""Tests for blackjack_rl.core.env — the episode-capture wrapper.
 
 Fast, deterministic wiring checks. The precise house-edge validation is statistical and lives
 in evaluation; here we only assert structure, determinism, a one-sided sanity bound, and the
@@ -9,7 +9,7 @@ import random
 from strategies.basic_strategy import BasicStrategy
 from simulator.game_state import Action
 from blackjack_rl.tabular.agent import TabularAgent
-from blackjack_rl.env import Episode, rollout_many
+from blackjack_rl.core.env import Episode, rollout_many
 
 _LEGAL: set[Action] = {"hit", "stand", "double", "split", "surrender"}
 

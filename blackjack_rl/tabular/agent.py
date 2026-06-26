@@ -16,7 +16,7 @@ import random
 from simulator.game_state import Action, GameState
 from strategies.base import Strategy
 
-from blackjack_rl.state import StateKey, encode_state
+from blackjack_rl.core.state import StateKey, encode_state
 
 # Actions the agent chooses among. Split is excluded by default (and surrender is off in
 # problem_a_config); `with_splits` enables it. `double`/`split` are only ever offered when the

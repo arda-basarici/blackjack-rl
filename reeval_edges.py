@@ -21,7 +21,7 @@ from pathlib import Path
 from strategies.basic_strategy import BasicStrategy
 
 from blackjack_rl.tabular.agent import TabularAgent
-from blackjack_rl.env import problem_a_config
+from blackjack_rl.core.env import problem_a_config
 from blackjack_rl.evaluation.metrics import GreedyPolicy, evaluate_policy
 
 RUNS = Path("runs")
@@ -48,7 +48,7 @@ def load_tabular(run_dir: str) -> TabularAgent:
     rec = json.loads((RUNS / run_dir / "record.json").read_text(encoding="utf-8"))
     ws = bool(rec["config"].get("with_splits", False))
     agent = TabularAgent(epsilon=0.0, with_splits=ws)
-    for e in rec["qtable"]:                              # keys match blackjack_rl.state.encode_state
+    for e in rec["qtable"]:                              # keys match blackjack_rl.core.state.encode_state
         base = (e["player_value"], e["is_soft"], e["dealer_upcard"])
         agent.q[((*base, e["can_split"]) if ws else base, e["action"])] = e["q"]
     return agent

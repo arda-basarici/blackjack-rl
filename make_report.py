@@ -8,7 +8,7 @@ Run from the repo root:   python make_report.py
 import subprocess
 import sys
 
-from blackjack_rl.util import concat_notebook_html
+from blackjack_rl.core.util import concat_notebook_html
 
 CHAPTERS = [
     "ch1_result", "ch2_diagnosis", "ch3_cornering", "ch4_representation",

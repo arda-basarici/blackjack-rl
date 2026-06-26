@@ -9,9 +9,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from blackjack_rl.config import ExperimentConfig
+from blackjack_rl.core.config import ExperimentConfig
 from blackjack_rl.tabular.experiment import run_experiment
-from blackjack_rl.schedules import KINDS
+from blackjack_rl.core.schedules import KINDS
 
 
 def main() -> None:

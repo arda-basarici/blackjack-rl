@@ -16,8 +16,8 @@ from strategies.basic_strategy import BasicStrategy
 
 from blackjack_rl.evaluation.metrics import GreedyPolicy, evaluate_policy
 from blackjack_rl.tabular.experiment import load_agent
-from blackjack_rl.persistence import load_record
-from blackjack_rl.util import format_duration
+from blackjack_rl.core.persistence import load_record
+from blackjack_rl.core.util import format_duration
 
 
 def main() -> None:

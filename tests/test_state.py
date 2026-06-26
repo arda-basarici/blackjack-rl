@@ -1,8 +1,8 @@
-"""Tests for blackjack_rl.state — the state contract."""
+"""Tests for blackjack_rl.core.state — the state contract."""
 from dataclasses import dataclass
 
 from simulator.game_state import GameState
-from blackjack_rl.state import encode_state
+from blackjack_rl.core.state import encode_state
 
 
 def _gs(player_value: int = 16, soft: bool = False, upcard: int = 10,

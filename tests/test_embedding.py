@@ -5,7 +5,7 @@ from __future__ import annotations
 import torch
 
 from blackjack_rl.dqn.agent import QNetwork
-from blackjack_rl.config import DQNConfig
+from blackjack_rl.core.config import DQNConfig
 from blackjack_rl.dqn.experiment import run_dqn
 from blackjack_rl.dqn.embedding import cell_embeddings, load_agent
 from blackjack_rl.dqn.network_diff import _state_for

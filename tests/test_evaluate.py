@@ -1,7 +1,7 @@
 """Tests for the load + re-evaluate path (no retraining)."""
 from blackjack_rl.tabular.agent import TabularAgent
 from blackjack_rl.tabular.experiment import _qtable_records, load_agent
-from blackjack_rl.persistence import load_record, save_run
+from blackjack_rl.core.persistence import load_record, save_run
 
 
 def test_load_agent_roundtrips_qtable() -> None:

@@ -27,7 +27,7 @@ from torch import nn
 from simulator.game_state import Action, GameState
 from strategies.base import Strategy
 
-from blackjack_rl.state import StateLike
+from blackjack_rl.core.state import StateLike
 
 # Action sets mirror TabularAgent so the two agents share one action space (and the evaluator /
 # policy-diff treat them identically). Split is offered only with_splits; surrender is off in

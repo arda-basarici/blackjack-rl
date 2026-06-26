@@ -2,8 +2,8 @@
 and that train_dqn actually anneals the optimizer step over training (CONCEPTS §26)."""
 from __future__ import annotations
 
-from blackjack_rl.config import DQNConfig
-from blackjack_rl.schedules import make_epsilon_schedule, make_schedule
+from blackjack_rl.core.config import DQNConfig
+from blackjack_rl.core.schedules import make_epsilon_schedule, make_schedule
 from blackjack_rl.dqn.deep_q import train_dqn
 
 

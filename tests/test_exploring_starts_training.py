@@ -1,6 +1,6 @@
 """Tests for the exploring-starts enumeration, rollout, and training loop (MC-ES control)."""
-from blackjack_rl.config import ExperimentConfig
-from blackjack_rl.env import problem_a_config
+from blackjack_rl.core.config import ExperimentConfig
+from blackjack_rl.core.env import problem_a_config
 from blackjack_rl.tabular.agent import TabularAgent
 from blackjack_rl.tabular.exploring_starts import (
     enumerate_start_pairs,

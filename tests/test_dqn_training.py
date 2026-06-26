@@ -14,7 +14,7 @@ import torch
 from simulator.game_state import Action, GameState
 
 from blackjack_rl.dqn.agent import DQNAgent
-from blackjack_rl.config import DQNConfig
+from blackjack_rl.core.config import DQNConfig
 from blackjack_rl.dqn.deep_q import train_dqn
 
 

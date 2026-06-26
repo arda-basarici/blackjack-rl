@@ -27,10 +27,10 @@ from simulator.game_state import Action
 from simulator.hand_simulator import HandSimulator
 
 from blackjack_rl.dqn.agent import DQNAgent
-from blackjack_rl.config import DQNConfig
-from blackjack_rl.env import CapturedHand, Step, problem_a_config
+from blackjack_rl.core.config import DQNConfig
+from blackjack_rl.core.env import CapturedHand, Step, problem_a_config
 from blackjack_rl.dqn.network_diff import diff_network
-from blackjack_rl.schedules import make_schedule
+from blackjack_rl.core.schedules import make_schedule
 from blackjack_rl.dqn.deep_q import (
     full_q_grid,
     hand_to_transitions,
@@ -48,7 +48,7 @@ from blackjack_rl.tabular.exploring_starts import (
     start_cards_for,
 )
 from blackjack_rl.dqn.replay import ReplayBuffer
-from blackjack_rl.util import format_duration
+from blackjack_rl.core.util import format_duration
 
 
 def es_capture(

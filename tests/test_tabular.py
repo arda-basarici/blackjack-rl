@@ -3,7 +3,7 @@ import random
 
 from simulator.game_state import GameState
 from blackjack_rl.tabular.agent import TabularAgent
-from blackjack_rl.state import encode_state
+from blackjack_rl.core.state import encode_state
 
 _STAGE2 = {"hit", "stand", "double"}
 

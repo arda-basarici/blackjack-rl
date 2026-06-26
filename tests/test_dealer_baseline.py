@@ -4,8 +4,8 @@ and that the terminal reward is adjusted correctly (stand baseline drives a stan
 from __future__ import annotations
 
 from blackjack_rl.dqn.agent import DQNAgent
-from blackjack_rl.config import DQNConfig
-from blackjack_rl.env import CapturedHand, Step
+from blackjack_rl.core.config import DQNConfig
+from blackjack_rl.core.env import CapturedHand, Step
 from blackjack_rl.dqn.dealer_baseline import (
     baseline, dealer_outcome_dist, score, stand_value,
 )

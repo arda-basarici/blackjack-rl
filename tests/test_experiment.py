@@ -1,7 +1,7 @@
 """Tests for blackjack_rl.tabular.experiment — orchestration mechanics on a tiny config."""
 import json
 
-from blackjack_rl.config import ExperimentConfig
+from blackjack_rl.core.config import ExperimentConfig
 from blackjack_rl.tabular.experiment import RunResult, run_experiment
 
 

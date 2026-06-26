@@ -22,7 +22,7 @@ from simulator.game_state import Action, GameState
 
 from blackjack_rl.dqn.agent import DQNAgent
 from blackjack_rl.evaluation.policy_diff import DiffReport, diff_policy
-from blackjack_rl.state import StateKey
+from blackjack_rl.core.state import StateKey
 
 # The canonical no-split decision grid: hard totals 5..20, soft totals 13..20 (A,2 .. A,9),
 # dealer upcard 2..11 (11 = ace). The same 2-card abstraction the basic-strategy table uses.

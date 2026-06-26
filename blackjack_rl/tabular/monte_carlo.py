@@ -20,11 +20,11 @@ from typing import Callable
 from simulator.game_state import Action
 
 from blackjack_rl.tabular.agent import TabularAgent
-from blackjack_rl.config import ExperimentConfig
-from blackjack_rl.env import Episode, problem_a_config, rollout
-from blackjack_rl.schedules import make_epsilon_schedule
-from blackjack_rl.state import StateKey
-from blackjack_rl.util import format_duration
+from blackjack_rl.core.config import ExperimentConfig
+from blackjack_rl.core.env import Episode, problem_a_config, rollout
+from blackjack_rl.core.schedules import make_epsilon_schedule
+from blackjack_rl.core.state import StateKey
+from blackjack_rl.core.util import format_duration
 
 
 def _apply_episode(agent: TabularAgent, episode: Episode) -> None:

@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 from blackjack_rl.dqn.agent import DQNAgent
-from blackjack_rl.config import DQNConfig
-from blackjack_rl.env import CapturedHand, Step, problem_a_config
+from blackjack_rl.core.config import DQNConfig
+from blackjack_rl.core.env import CapturedHand, Step, problem_a_config
 from blackjack_rl.dqn.deep_q import _legal_mask, hand_to_transitions
 
 

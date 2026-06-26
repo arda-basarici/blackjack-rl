@@ -18,7 +18,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from blackjack_rl.schedules import KINDS
+from blackjack_rl.core.schedules import KINDS
 
 
 @dataclass(frozen=True)

@@ -1,9 +1,9 @@
-"""Tests for blackjack_rl.config — the ExperimentConfig contract."""
+"""Tests for blackjack_rl.core.config — the ExperimentConfig contract."""
 from dataclasses import FrozenInstanceError, asdict
 
 import pytest
 
-from blackjack_rl.config import ExperimentConfig
+from blackjack_rl.core.config import ExperimentConfig
 
 
 def test_defaults() -> None:

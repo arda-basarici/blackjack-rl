@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import torch
 
-from blackjack_rl.config import DQNConfig
+from blackjack_rl.core.config import DQNConfig
 
 
 def test_default_is_cpu() -> None:

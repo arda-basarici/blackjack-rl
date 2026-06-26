@@ -15,7 +15,7 @@ from simulator.config import SimulatorConfig
 from simulator.game_state import Action, GameState
 from strategies.base import Strategy
 
-from blackjack_rl.env import problem_a_config, rollout
+from blackjack_rl.core.env import problem_a_config, rollout
 
 
 class _GreedyAgent(Protocol):

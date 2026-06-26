@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from blackjack_rl.persistence import git_hash, save_run
+from blackjack_rl.core.persistence import git_hash, save_run
 
 
 def test_git_hash_is_a_string():
