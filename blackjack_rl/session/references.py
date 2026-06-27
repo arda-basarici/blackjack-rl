@@ -11,7 +11,7 @@ agent trains in (``session.env``), so the reference and the agent are measured o
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import sqrt
 
 from simulator.game_state import Action
@@ -39,20 +39,95 @@ class CountEdge:
     n: int
 
 
-def edge_by_count(
-    *, n_hands: int, seed: int = 0, max_hands_per_session: int = 1000
-) -> dict[int, CountEdge]:
-    """Empirically measure player edge as a function of Hi-Lo true count (DESIGN D17, B1).
+@dataclass
+class CountAccumulator:
+    """Per-bucket Welford moments ``[n, mean, M2]`` keyed by integer Hi-Lo true count — the shared
+    accumulation primitive behind ``edge_by_count`` (single stream) and its parallel runner (B2a).
 
-    Plays flat-bet basic strategy through the Problem-B session env (counting on, shoe persists,
-    reshuffle at penetration) — the *same* env the bet agent trains in (D17 "identical terms") — and
-    buckets each hand by ``round(true_count)``, accumulating the per-unit return with Welford's
-    algorithm (stable single-pass mean + variance). The starting bankroll is set far above any
-    reachable loss so a session never ruins; ruin timing would be count-independent anyway, so it
-    could not bias the per-count buckets regardless. Only the edge is measured here.
+    Holds *raw* running moments, not finalized ``CountEdge``s, for two reasons: (1) partials from
+    independent workers combine **losslessly** via ``merge`` (Chan's parallel variance), which needs
+    M2, not a finished variance; (2) the ``n < 2`` drop is deferred to ``edges`` so a bucket that is
+    tiny in one worker but populated overall is not lost mid-merge. ``add`` mutates owned local state
+    (Welford is inherently accumulative); ``merge`` and ``edges`` are pure.
+    """
 
-    Returns one ``CountEdge`` per bucket that saw >= 2 hands (variance needs two), keyed and ordered
-    by integer true count. Single-hand buckets (the rare extreme counts) are dropped as unmeasurable.
+    buckets: dict[int, list[float]] = field(default_factory=dict)  # tc -> [n, mean, M2]
+
+    def add(self, true_count: int, value: float) -> None:
+        """Fold one per-unit return into its bucket — Welford's online mean+variance update."""
+        a = self.buckets.setdefault(true_count, [0.0, 0.0, 0.0])
+        a[0] += 1.0
+        delta = value - a[1]
+        a[1] += delta / a[0]
+        a[2] += delta * (value - a[1])
+
+    def merge(self, other: CountAccumulator) -> CountAccumulator:
+        """Combine two partials into a new accumulator (pure) via Chan et al.'s parallel variance.
+
+        Per shared bucket: ``n = nA + nB``, ``mean = meanA + δ·nB/n``, ``M2 = M2A + M2B + δ²·nA·nB/n``
+        (``δ = meanB − meanA``); buckets present on only one side carry over unchanged. Exact —
+        merging worker partials yields the same moments as folding every hand into one stream, which
+        is what lets the runner fan out across cores without changing the measured curve.
+        """
+        out = CountAccumulator({tc: list(m) for tc, m in self.buckets.items()})
+        for tc, (n_b, mean_b, m2_b) in other.buckets.items():
+            if tc not in out.buckets:
+                out.buckets[tc] = [n_b, mean_b, m2_b]
+                continue
+            n_a, mean_a, m2_a = out.buckets[tc]
+            n = n_a + n_b
+            delta = mean_b - mean_a
+            out.buckets[tc] = [
+                n,
+                mean_a + delta * n_b / n,
+                m2_a + m2_b + delta * delta * n_a * n_b / n,
+            ]
+        return out
+
+    def edges(self) -> dict[int, CountEdge]:
+        """Finalize to one ``CountEdge`` per bucket with ``n >= 2`` (variance needs two), keyed and
+        ordered by true count. Single-hand buckets (rare extreme counts) are dropped as unmeasurable.
+        """
+        result: dict[int, CountEdge] = {}
+        for true_count in sorted(self.buckets):
+            n_raw, mean, m2 = self.buckets[true_count]
+            n = int(n_raw)
+            if n < 2:
+                continue
+            variance = m2 / (n - 1)
+            result[true_count] = CountEdge(
+                true_count=true_count,
+                mean_return=mean,
+                variance=variance,
+                std_error=sqrt(variance / n),
+                n=n,
+            )
+        return result
+
+    @property
+    def n_total(self) -> int:
+        """Total hands folded in, across all buckets (incl. ``n < 2`` ones)."""
+        return int(sum(m[0] for m in self.buckets.values()))
+
+    @property
+    def pooled_mean(self) -> float:
+        """Frequency-weighted mean per-unit return over *all* buckets (incl. ``n < 2``) — the exact
+        flat-bet edge across every hand seen, the anchor-check quantity (B2a)."""
+        total = sum(m[0] for m in self.buckets.values())
+        return sum(m[0] * m[1] for m in self.buckets.values()) / total if total else 0.0
+
+
+def accumulate_edges(
+    *, n_hands: int, seed: int, max_hands_per_session: int = 1000
+) -> CountAccumulator:
+    """Play ~``n_hands`` of flat-bet basic strategy through the Problem-B session env off ``seed`` and
+    return the raw per-bucket ``CountAccumulator`` (unfinalized, mergeable) — the shared core of
+    ``edge_by_count`` and the parallel runner (one call per worker, with distinct seeds).
+
+    Counting on, shoe persists, reshuffle at penetration — the *same* env the bet agent trains in
+    (D17 "identical terms"); each hand is bucketed by ``round(true_count)`` and folded with Welford.
+    The starting bankroll sits far above any reachable loss so a session never ruins; ruin timing is
+    count-independent anyway, so it could not bias the per-count buckets regardless.
     """
     if n_hands < 1:
         raise ValueError(f"n_hands must be >= 1, got {n_hands}")
@@ -64,37 +139,32 @@ def edge_by_count(
         seed=seed,
     )
 
-    acc: dict[int, list[float]] = {}  # bucket -> [n, mean, m2] (Welford)
+    acc = CountAccumulator()
     collected = 0
     for capture in run_sessions(config, BasicStrategy(), FlatBet(1.0), n_sessions):
         for rec in capture.hands:
             if collected >= n_hands:
                 break
             ret = rec.payout / rec.bet  # per-unit return (flat bet 1; robust to any spread clamp)
-            a = acc.setdefault(round(rec.true_count), [0.0, 0.0, 0.0])
-            a[0] += 1
-            delta = ret - a[1]
-            a[1] += delta / a[0]
-            a[2] += delta * (ret - a[1])
+            acc.add(round(rec.true_count), ret)
             collected += 1
         if collected >= n_hands:
             break
+    return acc
 
-    edges: dict[int, CountEdge] = {}
-    for true_count in sorted(acc):
-        n_raw, mean, m2 = acc[true_count]
-        n = int(n_raw)
-        if n < 2:
-            continue
-        variance = m2 / (n - 1)
-        edges[true_count] = CountEdge(
-            true_count=true_count,
-            mean_return=mean,
-            variance=variance,
-            std_error=sqrt(variance / n),
-            n=n,
-        )
-    return edges
+
+def edge_by_count(
+    *, n_hands: int, seed: int = 0, max_hands_per_session: int = 1000
+) -> dict[int, CountEdge]:
+    """Empirically measure player edge as a function of Hi-Lo true count (DESIGN D17, B1).
+
+    A thin single-stream finalize over ``accumulate_edges``: returns one ``CountEdge`` per bucket
+    that saw >= 2 hands (variance needs two), keyed and ordered by integer true count. The high-n
+    parallel measurement (B2a) reuses ``accumulate_edges`` per worker and merges before finalizing.
+    """
+    return accumulate_edges(
+        n_hands=n_hands, seed=seed, max_hands_per_session=max_hands_per_session
+    ).edges()
 
 
 def kelly_bet_curve(edges: dict[int, CountEdge]) -> dict[int, float]:

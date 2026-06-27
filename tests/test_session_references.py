@@ -10,9 +10,11 @@ Three kinds of check:
 import pytest
 
 from blackjack_rl.session.references import (
+    CountAccumulator,
     CountEdge,
     IndexPlay,
     IndexPlayTable,
+    accumulate_edges,
     edge_by_count,
     index_plays,
     kelly_bet_curve,
@@ -63,6 +65,52 @@ def test_edge_by_count_is_deterministic():
 def test_edge_by_count_rejects_nonpositive_n():
     with pytest.raises(ValueError):
         edge_by_count(n_hands=0)
+
+
+# --- CountAccumulator (the mergeable primitive behind the parallel B2a runner) -------
+
+def test_accumulator_merge_equals_single_stream():
+    """The load-bearing invariant: merging two partials gives the *same* moments as folding every
+    value into one accumulator (Chan's parallel variance is exact). This is what lets the B2a runner
+    fan out across cores without changing the measured curve. Buckets overlap and differ in size."""
+    left_values = {0: [1.0, -1.0, 2.0, 0.0], 1: [3.0, -2.0], 5: [1.5]}
+    right_values = {0: [0.5, -0.5], 1: [4.0, 1.0, -3.0], 7: [2.0, 2.0]}
+
+    left, right, single = CountAccumulator(), CountAccumulator(), CountAccumulator()
+    for tc, vals in left_values.items():
+        for v in vals:
+            left.add(tc, v)
+            single.add(tc, v)
+    for tc, vals in right_values.items():
+        for v in vals:
+            right.add(tc, v)
+            single.add(tc, v)
+
+    merged_edges, single_edges = left.merge(right).edges(), single.edges()
+    assert merged_edges.keys() == single_edges.keys()
+    for tc, m in merged_edges.items():  # algebraically exact -> float-close (summation order differs)
+        s = single_edges[tc]
+        assert m.n == s.n
+        assert m.mean_return == pytest.approx(s.mean_return)
+        assert m.variance == pytest.approx(s.variance)
+    assert left.merge(right).n_total == single.n_total == 14
+    assert left.merge(right).pooled_mean == pytest.approx(single.pooled_mean)
+
+
+def test_accumulator_merge_is_pure():
+    """merge returns a new accumulator and leaves both operands untouched."""
+    a, b = CountAccumulator(), CountAccumulator()
+    a.add(0, 1.0)
+    b.add(0, 2.0)
+    a.merge(b)
+    assert a.buckets == {0: [1.0, 1.0, 0.0]}  # unchanged
+    assert b.buckets == {0: [1.0, 2.0, 0.0]}  # unchanged
+
+
+def test_accumulate_edges_finalizes_to_edge_by_count():
+    """edge_by_count is exactly accumulate_edges(...).edges() — the shared-core refactor holds."""
+    acc = accumulate_edges(n_hands=4000, seed=3)
+    assert acc.edges() == edge_by_count(n_hands=4000, seed=3)
 
 
 # --- kelly_bet_curve -----------------------------------------------------------------
