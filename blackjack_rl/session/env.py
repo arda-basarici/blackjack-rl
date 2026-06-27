@@ -43,6 +43,22 @@ class BetPolicy(Protocol):
         ...
 
 
+BET_SPREAD: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8)
+"""The project's single bet ladder (B2b) — one shared **arithmetic** spread, held constant across
+every config and experiment so all measured differences attribute to the variable under study
+(bankroll, encoding, algorithm), never to the action set.
+
+Arithmetic because Kelly's target is a ~linear ramp in true count (edge ≈ linear in TC, per-hand
+variance ≈ constant), which uniform steps track with uniform error; a geometric ladder (1,2,4,8)
+would over-resolve the bottom and jump at the top. The top of 8u ≈ full Kelly at TC +6 against the
+growth bankroll, and that same 8u is over-betting headroom at the (smaller) ruin bankroll — one
+ladder serving both regimes. (This is a *reasoned* design choice, not a measured arithmetic-beats-
+geometric result.)"""
+
+GROWTH_BANKROLL = 400.0
+RUIN_BANKROLL = 200.0
+
+
 @dataclass(frozen=True)
 class SessionConfig:
     """Knobs for a Problem B session — the MDP/risk parameters (env config lives with the env,
@@ -52,9 +68,9 @@ class SessionConfig:
     ruin_threshold    : bankroll at/below this ends the session (terminal). Must be >= the spread
                         floor (enforced): below the minimum wager you cannot place a hand, which *is*
                         ruin — and it keeps the bankroll cap from forcing a sub-minimum bet.
-    bet_spread        : the discrete wager levels the bettor may choose (D15). **Provisional**
-                        default — the levels (range and spacing) are finalized in B2 against the
-                        empirical edge-by-count / full-Kelly curve measured in B1, not guessed now.
+    bet_spread        : the discrete wager levels the bettor may choose (D15). Defaults to the
+                        project-wide ``BET_SPREAD`` (1..8, fixed); the canonical regimes are the
+                        named ``growth_config`` / ``ruin_config`` below, which differ only in bankroll.
     max_hands         : horizon cap (terminal). A session ends at ruin or here, whichever first —
                         so the env always terminates even under positive (counting) drift.
     seed              : global-RNG seed consumed by ``run_sessions`` (the batch entry point), so a
@@ -63,7 +79,7 @@ class SessionConfig:
 
     starting_bankroll: float = 100.0
     ruin_threshold: float = 1.0
-    bet_spread: tuple[int, ...] = (1, 2, 4, 8)
+    bet_spread: tuple[int, ...] = BET_SPREAD
     max_hands: int = 1000
     seed: int = 42
 
@@ -101,6 +117,24 @@ def problem_b_config(min_bet: float = 1.0) -> SimulatorConfig:
     cfg.shuffle_every_round = False
     cfg.min_bet = min_bet
     return cfg
+
+
+def growth_config(seed: int = 42) -> SessionConfig:
+    """Growth regime (D14): the bankroll is fat enough that the spread tops out near full Kelly at
+    the highest count we size for (TC +6: ``f* ≈ 1.96%`` → ``0.0196 × 400 ≈ 8u``), so the bettor
+    rides the Kelly ramp and the ruin barrier stays **dormant** — ruin is a tail non-event. The
+    ruin-dormant half of the two-config growth-vs-ruin comparison."""
+    return SessionConfig(starting_bankroll=GROWTH_BANKROLL, bet_spread=BET_SPREAD, seed=seed)
+
+
+def ruin_config(seed: int = 42) -> SessionConfig:
+    """Ruin regime (D14): the bankroll is lean enough that the barrier is reachable by **over**-
+    betting — the spread's 8u top is ~2× full Kelly here, so the ladder offers headroom the bettor
+    must decline. The learnable result is a **bet-ceiling that grows without courting ruin**,
+    tightening as the bankroll shrinks. (Note: measured — full-Kelly-fraction sizing never ruins
+    here; only over-betting does. So the result is 'learn the ceiling', not 'bend below continuous
+    Kelly'.) The non-degenerate axis of the growth-vs-ruin comparison."""
+    return SessionConfig(starting_bankroll=RUIN_BANKROLL, bet_spread=BET_SPREAD, seed=seed)
 
 
 @dataclass(frozen=True)

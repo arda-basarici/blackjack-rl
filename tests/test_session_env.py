@@ -12,11 +12,14 @@ from strategies.basic_strategy import BasicStrategy
 
 from blackjack_rl.session.bet_agent import FlatBet
 from blackjack_rl.session.env import (
+    BET_SPREAD,
     HandRecord,
     SessionCapture,
     SessionConfig,
     SessionEnv,
+    growth_config,
     problem_b_config,
+    ruin_config,
     run_sessions,
 )
 
@@ -134,6 +137,29 @@ def test_bet_is_clamped_to_spread_and_bankroll():
     for rec in cap.hands:
         assert rec.bet <= max(cfg.bet_spread)
         assert rec.bet <= rec.bankroll_before
+
+
+def test_named_configs_share_one_spread_differ_only_in_bankroll():
+    # B2b: one fixed ladder across both regimes; only the bankroll sets the growth-vs-ruin axis.
+    g, r = growth_config(), ruin_config()
+    assert g.bet_spread == r.bet_spread == BET_SPREAD     # the single shared ladder
+    assert g.starting_bankroll == 400.0                   # growth: spread top ~= full Kelly @ +6
+    assert r.starting_bankroll == 200.0                   # ruin: 8u top ~= 2x Kelly -> over-bet headroom
+    assert g.starting_bankroll > r.starting_bankroll      # growth regime is the fatter bankroll
+    # the only difference is the bankroll (spread, ruin, horizon, seed all identical)
+    assert (g.ruin_threshold, g.max_hands, g.seed) == (r.ruin_threshold, r.max_hands, r.seed)
+
+
+def test_named_configs_are_valid_and_seedable():
+    # construction runs __post_init__ validation; seed override threads through
+    assert growth_config(seed=7).seed == 7
+    assert ruin_config(seed=7).seed == 7
+
+
+def test_bet_spread_is_the_fixed_arithmetic_ladder():
+    assert BET_SPREAD == (1, 2, 3, 4, 5, 6, 7, 8)
+    steps = [b - a for a, b in zip(BET_SPREAD, BET_SPREAD[1:])]
+    assert all(s == 1 for s in steps), "BET_SPREAD must be arithmetic (uniform unit steps)"
 
 
 @pytest.mark.parametrize(
