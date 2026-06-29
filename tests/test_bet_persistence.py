@@ -1,6 +1,7 @@
 """Round-trip tests for bettor persistence (save_bet_run / load_bet_agent)."""
 from __future__ import annotations
 
+import pytest
 import torch
 
 from blackjack_rl.session.bet_agent import BetAgent
@@ -56,3 +57,14 @@ def test_loaded_agent_is_greedy(tmp_path):
     cfg = BetTrainConfig(session=growth_config(), n_sessions=5)
     run_dir = save_bet_run(tmp_path, agent, cfg, metrics={}, run_id="eps")
     assert load_bet_agent(run_dir).epsilon == 0.0
+
+
+def test_load_rejects_non_bet_run(tmp_path):
+    """A run dir from another experiment (same record.json/model.pt shape) fails clearly, not cryptically."""
+    import json
+
+    rd = tmp_path / "other"
+    rd.mkdir()
+    (rd / "record.json").write_text(json.dumps({"kind": "dqn", "construction": {}}))
+    with pytest.raises(ValueError, match="not a bet_agent run"):
+        load_bet_agent(rd)

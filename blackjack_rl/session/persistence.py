@@ -23,6 +23,7 @@ import torch
 
 from blackjack_rl.core.persistence import save_run
 from blackjack_rl.session.bet_agent import BetAgent
+from blackjack_rl.session.train import BetTrainConfig
 
 
 def construction_of(agent: BetAgent) -> dict[str, Any]:
@@ -36,11 +37,12 @@ def construction_of(agent: BetAgent) -> dict[str, Any]:
 
 
 def save_bet_run(
-    runs_root: Path | str, agent: BetAgent, config: Any, metrics: dict, run_id: str | None = None
+    runs_root: Path | str, agent: BetAgent, config: BetTrainConfig, metrics: dict, run_id: str | None = None
 ) -> Path:
     """Persist a trained bettor: ``record.json`` (construction + full config + metrics + stamped
-    provenance) beside ``model.pt`` (weights). Returns the run dir. ``config`` is any dataclass
-    (``BetTrainConfig``); it is stored verbatim for provenance via :func:`dataclasses.asdict`."""
+    provenance) beside ``model.pt`` (weights). Returns the run dir. ``config`` (the ``BetTrainConfig``
+    that produced the run) is stored verbatim as provenance — write-only: :func:`load_bet_agent` rebuilds
+    from ``construction``, never from ``config`` — via :func:`dataclasses.asdict`."""
     record = {
         "kind": "bet_agent",
         "construction": construction_of(agent),
@@ -60,6 +62,8 @@ def load_bet_agent(run_dir: Path | str) -> BetAgent:
     ``dqn.embedding.load_agent``."""
     run_dir = Path(run_dir)
     record = json.loads((run_dir / "record.json").read_text(encoding="utf-8"))
+    if record.get("kind") != "bet_agent":  # validate at the boundary: every run dir looks alike
+        raise ValueError(f"{run_dir} is not a bet_agent run (kind={record.get('kind')!r})")
     c = record["construction"]
     agent = BetAgent(
         levels=c["levels"],
