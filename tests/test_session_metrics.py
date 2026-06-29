@@ -13,9 +13,11 @@ import pytest
 from blackjack_rl.session.env import HandRecord, SessionCapture
 from blackjack_rl.session.metrics import (
     bankroll_distribution,
+    bankroll_distribution_of,
     drawdown_breach_probability,
     drawdown_distribution,
     growth_rate,
+    growth_rate_of,
     ruin_probability,
     session_growth_rate,
     session_max_drawdown,
@@ -114,6 +116,24 @@ def test_growth_rate_drops_wipeouts_from_estimate():
 def test_growth_rate_empty_raises():
     with pytest.raises(ValueError):
         growth_rate([])
+
+
+def test_scalar_cores_match_capture_path():
+    """The scalar entry points (used by the parallel runner) agree with the capture-based functions —
+    same single implementation, so a worker reducing in-process gives identical results."""
+    captures = [_session([100, 200]), _session([100, 0], ruined=True), _session([100, 150])]
+    assert growth_rate_of([session_growth_rate(c) for c in captures]) == growth_rate(captures)
+    assert bankroll_distribution_of([c.final_bankroll for c in captures]) == bankroll_distribution(
+        captures
+    )
+
+
+def test_growth_rate_of_drops_minus_inf():
+    from math import log
+
+    est = growth_rate_of([log(2), float("-inf"), log(1.1)])
+    assert est.n == 2  # the -inf wipeout is dropped
+    assert est.value == pytest.approx((log(2) + log(1.1)) / 2)
 
 
 # --- ruin probability (risk) ---------------------------------------------------------

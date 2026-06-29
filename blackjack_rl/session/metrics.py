@@ -143,18 +143,46 @@ def session_max_drawdown(capture: SessionCapture) -> float:
     return max(0.0, 1.0 - lo / w0)
 
 
-# --- batch aggregates: outcome axis --------------------------------------------------
+# --- scalar aggregation cores (over per-session values) ------------------------------
+# A parallel runner reduces each SessionCapture to these per-session scalars *in-worker* (so it ships
+# tiny arrays across processes, not full captures) and aggregates here. The capture-based functions
+# below are thin wrappers over these, so single-process and parallel paths share one implementation.
+
+def growth_rate_of(per_session_growth: list[float]) -> Estimate:
+    """Growth-rate Estimate from per-session ``g_i``. Wipeouts (``-inf``) are dropped from the
+    estimate; ``Estimate.n`` is the count kept, so ``len(input) - n`` is the dropped-wipeout count
+    (accounted for on the risk axis, D2 option a)."""
+    return _mean_ci([g for g in per_session_growth if isfinite(g)])
+
+
+def bankroll_distribution_of(
+    final_bankrolls: list[float], quantiles: tuple[float, ...] = (0.1, 0.5, 0.9)
+) -> Distribution:
+    """Final-bankroll Distribution from per-session final bankrolls (skew-aware quantiles)."""
+    if not final_bankrolls:
+        raise ValueError("bankroll_distribution_of needs at least one session")
+    return _summarize(final_bankrolls, quantiles)
+
+
+def drawdown_distribution_of(
+    drawdowns: list[float], quantiles: tuple[float, ...] = (0.5, 0.9, 0.99)
+) -> Distribution:
+    """Drawdown Distribution from per-session drawdowns ``D_i``."""
+    if not drawdowns:
+        raise ValueError("drawdown_distribution_of needs at least one session")
+    return _summarize(drawdowns, quantiles)
+
+
+# --- batch aggregates over captures (single-process / tests; delegate to the cores) --
 
 def growth_rate(captures: list[SessionCapture]) -> Estimate:
     """Per-hand log-growth rate across the batch: mean +/- 95% CI over the per-session ``g_i``
-    (sessions are the independent unit, D1). Wiped sessions (``g_i = -inf``) are dropped from the
-    growth estimate and accounted for on the risk axis (D2 option a); ``Estimate.n`` is the count
-    actually used, so ``len(captures) - n`` is the number of dropped wipeouts — the caller surfaces
-    that count rather than letting it vanish silently."""
+    (sessions are the independent unit, D1). Wiped sessions are dropped from the estimate and
+    accounted for on the risk axis (D2 option a); ``len(captures) - Estimate.n`` is the dropped count.
+    """
     if not captures:
         raise ValueError("growth_rate needs at least one session")
-    finite = [g for g in (session_growth_rate(c) for c in captures) if isfinite(g)]
-    return _mean_ci(finite)
+    return growth_rate_of([session_growth_rate(c) for c in captures])
 
 
 def bankroll_distribution(
@@ -164,10 +192,8 @@ def bankroll_distribution(
     right-skewed (a few count-favorable shoes run up big), so the mean alone misleads."""
     if not captures:
         raise ValueError("bankroll_distribution needs at least one session")
-    return _summarize([c.final_bankroll for c in captures], quantiles)
+    return bankroll_distribution_of([c.final_bankroll for c in captures], quantiles)
 
-
-# --- batch aggregates: risk axis -----------------------------------------------------
 
 def ruin_probability(captures: list[SessionCapture]) -> Proportion:
     """Fraction of sessions that hit the hard ruin barrier, with a Wilson 95% CI (D17)."""
@@ -184,7 +210,7 @@ def drawdown_distribution(
     shape, and the informative risk signal in the growth regime where hard ruin ~ 0."""
     if not captures:
         raise ValueError("drawdown_distribution needs at least one session")
-    return _summarize([session_max_drawdown(c) for c in captures], quantiles)
+    return drawdown_distribution_of([session_max_drawdown(c) for c in captures], quantiles)
 
 
 def drawdown_breach_probability(captures: list[SessionCapture], level: float) -> Proportion:
