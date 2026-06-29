@@ -23,7 +23,7 @@ import torch
 from strategies.basic_strategy import BasicStrategy
 
 from blackjack_rl.core.paths import LOGS_DIR
-from blackjack_rl.dqn.deep_q import make_target, sync_target, td_update
+from blackjack_rl.dqn.deep_q import make_target, soft_update, sync_target, td_update
 from blackjack_rl.dqn.replay import ReplayBuffer, Transition
 from blackjack_rl.session.bet_agent import BetAgent, greedy_bet_curve
 from blackjack_rl.session.env import SessionEnv, growth_config
@@ -82,7 +82,7 @@ def real_transitions(capture, encode, n_levels: int, scale: float) -> list[Trans
 
 
 def run(tag: str, n_sessions: int, gamma: float, scale: float, batch: int, eps: float, lr: float,
-        seed: int = SEED) -> None:
+        seed: int = SEED, double: bool = False, buffer_cap: int = BUFFER, tau: float = 0.0) -> None:
     random.seed(seed)
     torch.manual_seed(seed)
     torch.set_num_threads(1)
@@ -92,13 +92,13 @@ def run(tag: str, n_sessions: int, gamma: float, scale: float, batch: int, eps: 
     agent = BetAgent(levels=growth_config().bet_spread, epsilon=eps, num_decks=env.sim_config.num_decks)
     target = make_target(agent.q_net)
     optimizer = torch.optim.Adam(agent.q_net.parameters(), lr=lr)
-    buffer = ReplayBuffer(capacity=BUFFER)
+    buffer = ReplayBuffer(capacity=buffer_cap)
 
     probe_bankroll = growth_config().starting_bankroll
     probe_depth = env.sim_config.num_decks / 2.0
     env_steps, grad_steps = 0, 0
     loss_sum, loss_count = 0.0, 0.0
-    _log(f"[{tag}] START n={n_sessions} gamma={gamma:g} scale={scale:g} batch={batch} eps={eps:g} lr={lr:g} seed={seed}")
+    _log(f"[{tag}] START n={n_sessions} gamma={gamma:g} scale={scale:g} batch={batch} eps={eps:g} lr={lr:g} seed={seed} double={double} buffer={buffer_cap} tau={tau:g}")
     start = time.perf_counter()
 
     for i in range(n_sessions):
@@ -107,11 +107,13 @@ def run(tag: str, n_sessions: int, gamma: float, scale: float, batch: int, eps: 
             buffer.push(t)
             env_steps += 1
             if len(buffer) >= WARMUP and buffer.can_sample(batch) and env_steps % TRAIN_EVERY == 0:
-                loss = td_update(agent.q_net, target, buffer.sample(batch), optimizer, gamma, double=False)
+                loss = td_update(agent.q_net, target, buffer.sample(batch), optimizer, gamma, double=double)
                 loss_sum += loss
                 loss_count += 1
                 grad_steps += 1
-                if grad_steps % TARGET_SYNC == 0:
+                if tau > 0:
+                    soft_update(target, agent.q_net, tau)
+                elif grad_steps % TARGET_SYNC == 0:
                     sync_target(target, agent.q_net)
 
         if (i + 1) % max(1, n_sessions // 8) == 0:
@@ -127,7 +129,7 @@ def run(tag: str, n_sessions: int, gamma: float, scale: float, batch: int, eps: 
     import json
     (RESULTS_DIR / f"{tag}.json").write_text(json.dumps({
         "tag": tag, "n_sessions": n_sessions, "gamma": gamma, "scale": scale, "batch": batch,
-        "eps": eps, "lr": lr, "seed": seed, "elapsed_s": round(elapsed, 1),
+        "eps": eps, "lr": lr, "seed": seed, "double": double, "buffer": buffer_cap, "tau": tau, "elapsed_s": round(elapsed, 1),
         "curve": {str(c): curve[c] for c in PROBE_COUNTS},
     }, indent=2))
     # persist the trained agent: weights + construction config (to rebuild the shell) + provenance.
@@ -140,7 +142,7 @@ def run(tag: str, n_sessions: int, gamma: float, scale: float, batch: int, eps: 
         },
         "train_config": {
             "n_sessions": n_sessions, "gamma": gamma, "scale": scale, "batch": batch,
-            "eps": eps, "lr": lr, "seed": seed, "regime": "growth",
+            "eps": eps, "lr": lr, "seed": seed, "double": double, "buffer": buffer_cap, "tau": tau, "regime": "growth",
         },
         "git_hash": _git_hash(),
         "curve": {str(c): curve[c] for c in PROBE_COUNTS},
@@ -154,7 +156,10 @@ def main() -> None:
     n_sessions, gamma, scale = int(sys.argv[2]), float(sys.argv[3]), float(sys.argv[4])
     batch, eps, lr = int(sys.argv[5]), float(sys.argv[6]), float(sys.argv[7])
     seed = int(sys.argv[8]) if len(sys.argv) > 8 else SEED
-    run(tag, n_sessions, gamma, scale, batch, eps, lr, seed)
+    double = bool(int(sys.argv[9])) if len(sys.argv) > 9 else False
+    buffer_cap = int(sys.argv[10]) if len(sys.argv) > 10 else BUFFER
+    tau = float(sys.argv[11]) if len(sys.argv) > 11 else 0.0
+    run(tag, n_sessions, gamma, scale, batch, eps, lr, seed, double, buffer_cap, tau)
 
 
 if __name__ == "__main__":

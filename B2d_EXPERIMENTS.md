@@ -24,8 +24,10 @@ lever fixes it*.
 | 1 | Throughput probe (γ=1 baseline) | exploratory | ~2.7 sess/s; γ=1 wanders |
 | 2 | γ-sweep | exploratory | γ→stability only; all flat; γ=1 diverges |
 | 3 | Oracle diagnostic | **decisive** | PASS — code sound |
-| 4 | Real-reward lever sweep | exploratory | **batch size** breaks the flatline |
+| 4 | Real-reward lever sweep | exploratory | **batch** breaks the flatline (intermittently) |
 | 5 | `torch_threads` benchmark | decisive | 1 thread fastest |
+| 6 | Batch-threshold ladder (@2500) | exploratory | ramp needs batch ≥~2048 but does **not stabilize** (wanders flat↔ramp) |
+| 7 | Long runs (batch 4096/2048 @5000) | exploratory | **in progress** — does more batch+data stabilize it? |
 | — | Prior committed baselines (B1–B2c) | committed | reference index |
 
 ---
@@ -140,9 +142,10 @@ batch=128; raising batch to 2048 produced a ramp — upper half near-exact (`+4�
 lower half still noisy. Mechanism: it's a **gradient-SNR** problem — bigger batch averages per-hand
 reward noise so the ~1e-4 count-signal surfaces in the gradient direction.
 
-**Caveats:** `batch2048` ran only 1200 sessions (confounded: bigger batch *and* less data, yet ramped
-anyway — strengthens the claim). Single seed, still wandering between checkpoints. Big batch costs ~4×
-per session (1.9s vs 0.5s).
+**Caveats / correction (see Test 6):** this `batch2048` final ramp was caught at a *lucky checkpoint* —
+the curve **wanders** between flat and ramp across checkpoints, it does not converge. Test 6 (batch 2048
+at 2500 sessions) ended **flat**. So batch makes the ramp *appear* but does **not stabilize** it. Also:
+only 1200 sessions (confounded with less data), single seed; big batch costs ~4× per session.
 
 ---
 
@@ -164,6 +167,35 @@ on 22 cores), not threads-per-run.
 
 ---
 
+## Test 6 — Batch-threshold ladder (where does the ramp turn on?)
+
+Clean OFAT: batch ∈ {256, 1024, 2048} at **equal 2500 sessions** (γ0, scale100, seed0), filling the
+ladder between `base` (128) and Test-4's `batch2048`. Final curves vs Kelly `1 1 1 2 5 8 8`:
+
+| batch | final curve (−4…+8) | shape |
+|---|---|---|
+| 128 (`base`) | `1 1 1 1 1 1 1` | flat |
+| 256 | `1 1 1 1 1 1 1` | flat |
+| 512 | `1 1 1 1 1 1 1` | flat |
+| 1024 | `1 1 1 1 1 1 1` | flat |
+| 2048 | `1 1 1 1 1 1 1` | flat (FINAL) — but **wandered through ramps mid-run** (`+4:8 +6:7 +8:7` @1560) |
+
+**Read — corrects Test 4.** The ramp is **intermittent, not stable.** ≤1024 stays flat; 2048 *oscillates*
+between flat and ramp across checkpoints and happened to end flat here (Test 4's 1200-session run happened
+to end *on* a ramp — a lucky checkpoint). So **batch is necessary to make the ramp appear, not sufficient
+to hold it.** Stabilising the argmax is the real open problem (→ Test 7; contingency: lr-decay).
+
+---
+
+## Test 7 — Long runs: does more batch + data stabilise the ramp? (IN PROGRESS)
+
+batch 4096 (seeds 0, 1) and batch 2048, all **5000 sessions**, γ0/scale100 — does more gradient-averaging
++ more data *converge* the ramp instead of oscillating? These **persist the trained agent** (`.pt` =
+weights + construction + provenance) for the four-axis eval. Status at last check: ~12–37% done, curves
+still noisy/wandering. *Append finals + the four-axis eval when complete.*
+
+---
+
 ## Prior committed baselines (B1–B2c) — reference index
 
 These are **committed, measured** experiments (not re-run here) that set the analytic ladder the learned
@@ -181,17 +213,30 @@ artifacts); each run id carries its own provenance (timestamp + git hash).
 
 ## Findings summary
 
-1. **Code is sound** (oracle PASS) — the flatline is not a bug.
+1. **Code is sound** (oracle PASS) — the flatline is not a bug; with a *denoised* signal the ramp is
+   clean **and stable**.
 2. **γ governs stability, not the ramp** — γ=1 diverges (telescoping variance); γ<1 stable but still flat.
    Use γ=0 for growth (Kelly is a myopic optimum); intermediate γ reserved for the ruin regime.
-3. **Batch size is the lever that produces the ramp** — it's a gradient-SNR problem; bigger batch
-   averages out the per-hand noise so the count signal surfaces. (Scale, ε did not move it alone.)
-4. **The ramp IS learnable from real rewards** — not a hopeless 20M-hand wall. Recipe forming:
-   **big batch + scaled reward + γ=0 + more data** (+ high-count coverage for the lower-half fine structure).
-5. **Speed:** ~2.5–2.7 sess/s; threads don't help; parallelism = independent runs across cores.
+3. **Batch (gradient-SNR) breaks the flatline — but only intermittently.** Bigger batch averages the
+   per-hand noise so the count signal surfaces; ≤1024 stays flat, ≥2048 makes the ramp *appear* — but it
+   **wanders** (flat↔ramp) rather than converging. A *stable* ramp is **not yet achieved** (Tests 4, 6).
+4. **The wall is gradient-SNR; stability is the crux.** The agent is re-estimating the same edge-by-count
+   curve that took **20M hands** to measure analytically, through a noisier channel (log-reward of random
+   bets) — the betting analog of Problem-A's rare-cell coverage. Whether more batch+data (Test 7) or
+   lr-decay stabilises it is **open**.
+5. **Interpretation [HYPOTHESIS]:** the wandering may be the *thin edge showing through.* B2c found Kelly
+   barely beats flat (full-Kelly net-negative @400u), so the Q-surface is near-flat across bet sizes — and
+   an argmax over a near-flat, noisy surface is *inherently* unstable. The difficulty of *learning* the
+   bet would then = the thin-edge *economics*. (Hypothesis — could be optimization, not economics.)
+6. **Meta-narrative:** the structured/analytic Kelly (sized from measured edges) is far more
+   sample-efficient than end-to-end RL here — the signal is too weak for function approximation to extract
+   cheaply. Mirrors the Problem-A "does the less-structured thing match the principled one?" arc.
+7. **Speed:** ~2.5–2.7 sess/s; threads don't help; parallelism = independent runs across cores.
 
-**Next candidate run:** `batch=4096, ~5000 sessions, γ=0, scale=100` (≈3–5 hr, background) — does the
-ramp stabilize and the lower half resolve? Optionally a 2nd seed in parallel.
+**Open question driving Test 7 / next:** does `batch 4096 + 5000 sessions` (running) *converge* the ramp,
+or does stability need **lr-decay** (settle the late argmax) — or is the wandering *fundamental* (finding
+#5)? The deliverable pipeline (`train_bet_agent.py` → `save_bet_run` → `load_bet_agent` →
+`eval_bet_agent.py` four-axis) is **built + validated**, ready the moment a stable agent lands.
 
 ---
 
