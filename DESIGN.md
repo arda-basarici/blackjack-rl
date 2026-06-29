@@ -277,6 +277,14 @@ for a finite bankroll — plus drawdown/variance). The **baseline ladder** attri
 flat-bet + basic → Kelly-bet + basic (isolates the betting lever) → factored → monolithic. Rungs 1–2
 are cheap (fixed basic strategy + analytic betting), so the attribution is high value for low cost.
 
+_Kelly baseline — discrete vs continuous (decided 2026-06-29, B2c)._ The Kelly rung is reported two
+ways. **Discrete** Kelly snaps `f*·W` to the bet spread — the **comparison baseline** the learned DQN
+bettor is graded against, on the *same* action set, so the DQN-vs-Kelly gap isolates "learned vs
+analytic" rather than conflating it with "discrete vs continuous." **Continuous** Kelly (raw `f*·W`,
+env-bounded to the spread's [min,max]) is kept as the analytic **ceiling**; the discrete→continuous
+gap is the cost of the finite menu (measured ≈ 0 in B2c). Both appear in the report, labelled as the
+fair same-menu comparison vs the unreachable ideal.
+
 ## 6. Signature deliverables & the finding
 
 **Deliverables.** A **policy-diff heatmap** — learned action vs. basic-strategy action per
