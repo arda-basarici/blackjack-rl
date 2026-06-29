@@ -139,6 +139,27 @@ def test_bet_is_clamped_to_spread_and_bankroll():
         assert rec.bet <= rec.bankroll_before
 
 
+def test_min_wager_zero_allows_sitting_out():
+    """min_wager=0 lets a bettor wager 0 (sit out); the default 1.0 floors a 0-request to the table
+    minimum. The Wonging mechanism — same cards dealt either way, only the −EV tax toggles."""
+
+    class _SitOut:
+        def bet(self, *, true_count, decks_remaining, bankroll):
+            return 0.0
+
+    random.seed(5)
+    sit = SessionEnv(SessionConfig(min_wager=0.0, max_hands=50)).run(BasicStrategy(), _SitOut())
+    assert sit.n_hands == 50  # ran the full horizon; betting 0 can't ruin
+    assert all(rec.bet == 0.0 for rec in sit.hands)         # sits out every hand
+    assert sit.final_bankroll == sit.starting_bankroll      # no stake risked -> bankroll unchanged
+    assert all(rec.log_reward == 0.0 for rec in sit.hands)  # log(W/W) = 0
+
+    random.seed(5)
+    forced = SessionEnv(SessionConfig(min_wager=1.0, max_hands=50)).run(BasicStrategy(), _SitOut())
+    assert all(rec.bet == 1.0 for rec in forced.hands)      # 0-request floored to the table minimum
+    assert forced.final_bankroll != forced.starting_bankroll  # forced bets move the bankroll
+
+
 def test_named_configs_share_one_spread_differ_only_in_bankroll():
     # B2b: one fixed ladder across both regimes; only the bankroll sets the growth-vs-ruin axis.
     g, r = growth_config(), ruin_config()
@@ -170,6 +191,8 @@ def test_bet_spread_is_the_fixed_arithmetic_ladder():
         {"ruin_threshold": 0.5},  # below the spread floor (1) -> could force a sub-minimum bet
         {"bet_spread": ()},
         {"bet_spread": (1, 0, 4)},
+        {"min_wager": -1.0},  # negative table minimum
+        {"min_wager": 9.0},   # above the spread top (8)
         {"max_hands": 0},
     ],
 )

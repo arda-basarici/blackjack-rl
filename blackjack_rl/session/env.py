@@ -68,6 +68,12 @@ class SessionConfig:
     ruin_threshold    : bankroll at/below this ends the session (terminal). Must be >= the spread
                         floor (enforced): below the minimum wager you cannot place a hand, which *is*
                         ruin — and it keeps the bankroll cap from forcing a sub-minimum bet.
+    min_wager         : the floor the env clamps each bet up to — the **table minimum**. Default 1.0
+                        (must bet at least one unit to play, the realistic constraint). Set to 0 to let
+                        a count-aware bettor **sit out** (bet 0) on non-positive-edge hands — the
+                        back-counting / "Wonging" experiment: the hand is still dealt (shoe + count
+                        advance) but no stake is risked, so forced-min vs 0 isolates the table-minimum
+                        tax on the frequent −EV hands.
     bet_spread        : the discrete wager levels the bettor may choose (D15). Defaults to the
                         project-wide ``BET_SPREAD`` (1..8, fixed); the canonical regimes are the
                         named ``growth_config`` / ``ruin_config`` below, which differ only in bankroll.
@@ -79,6 +85,7 @@ class SessionConfig:
 
     starting_bankroll: float = 100.0
     ruin_threshold: float = 1.0
+    min_wager: float = 1.0
     bet_spread: tuple[int, ...] = BET_SPREAD
     max_hands: int = 1000
     seed: int = 42
@@ -99,6 +106,10 @@ class SessionConfig:
             raise ValueError(
                 f"ruin_threshold ({self.ruin_threshold}) must be >= the spread floor "
                 f"({min(self.bet_spread)}) — else the bankroll cap can force a sub-minimum bet"
+            )
+        if not 0 <= self.min_wager <= max(self.bet_spread):
+            raise ValueError(
+                f"min_wager ({self.min_wager}) must be in [0, spread top ({max(self.bet_spread)})]"
             )
         if self.max_hands < 1:
             raise ValueError(f"max_hands must be >= 1, got {self.max_hands}")
@@ -199,7 +210,7 @@ class SessionEnv:
         cfg = self.sim_config
         deck = Deck(num_decks=cfg.num_decks, counting_system=HiLoCount())
         bankroll = self.config.starting_bankroll
-        spread_lo = float(min(self.config.bet_spread))
+        wager_lo = float(self.config.min_wager)  # table minimum; 0 lets a bettor sit out (Wonging)
         spread_hi = float(max(self.config.bet_spread))
 
         records: list[HandRecord] = []
@@ -213,7 +224,7 @@ class SessionEnv:
             wager = bet.bet(
                 true_count=true_count, decks_remaining=decks_remaining, bankroll=bankroll
             )
-            wager = min(_clamp(wager, spread_lo, spread_hi), bankroll)  # never wager more than held
+            wager = min(_clamp(wager, wager_lo, spread_hi), bankroll)  # never wager more than held
 
             result = HandSimulator(cfg, deck, play).play_hand(
                 session_id="b", bankroll=bankroll, bet_size=wager, hands_played=hands_played
