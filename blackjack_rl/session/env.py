@@ -21,7 +21,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 from math import log
-from typing import Iterator, Protocol
+from typing import Iterator, Protocol, runtime_checkable
 
 from simulator.card import Deck
 from simulator.config import SimulatorConfig, vegas_strip
@@ -40,6 +40,25 @@ class BetPolicy(Protocol):
 
     def bet(self, *, true_count: float, decks_remaining: float, bankroll: float) -> float:
         """Return the desired wager (env clamps it to the spread and the bankroll)."""
+        ...
+
+
+@runtime_checkable
+class IndexedBetPolicy(BetPolicy, Protocol):
+    """A ``BetPolicy`` that picks from a discrete ``levels`` menu and can report the *index* it chose.
+
+    The env drives an indexed bettor through ``select_level`` (one decision per hand) and records the
+    chosen index on the ``HandRecord`` (``bet_level``), so a value-based trainer can reconstruct exact
+    action indices — exact even when the env clamps the wager to the bankroll (near ruin the clamped wager
+    is not a menu level, so it cannot be reverse-mapped from the recorded wager). The analytic ``FlatBet``
+    / ``KellyBet`` are plain ``BetPolicy`` (no index), so their captures carry ``bet_level = None``. The
+    learned ``BetAgent`` (B2d) implements this. ``runtime_checkable`` so the env distinguishes the two via
+    ``isinstance`` (the ``select_level`` method is the distinguishing member)."""
+
+    levels: tuple[float, ...]
+
+    def select_level(self, *, true_count: float, decks_remaining: float, bankroll: float) -> int:
+        """Index into ``levels`` of the chosen wager (the env wagers ``levels[index]``, then clamps)."""
         ...
 
 
@@ -160,6 +179,10 @@ class HandRecord:
     ``log_reward = log(bankroll_after / bankroll_before)``, except a total wipe-out
     (``bankroll_after == 0``) is ``-inf`` — mathematically honest; B2 chooses any finite ruin
     penalty as a reward-shaping decision there.
+
+    ``bet_level`` is the *index* an ``IndexedBetPolicy`` chose (the action the value-based trainer credits,
+    exact even where the env clamped ``bet`` to the bankroll); ``None`` for a plain ``BetPolicy``
+    (``FlatBet`` / ``KellyBet``), whose captures are not reconstructed into discrete-action transitions.
     """
 
     true_count: float
@@ -170,6 +193,7 @@ class HandRecord:
     bankroll_after: float
     log_reward: float
     done: bool
+    bet_level: int | None = None
 
 
 @dataclass(frozen=True)
@@ -221,10 +245,17 @@ class SessionEnv:
 
             true_count = deck.true_count
             decks_remaining = deck.cards_remaining() / 52.0
-            wager = bet.bet(
-                true_count=true_count, decks_remaining=decks_remaining, bankroll=bankroll
-            )
-            wager = min(_clamp(wager, wager_lo, spread_hi), bankroll)  # never wager more than held
+            if isinstance(bet, IndexedBetPolicy):  # discrete bettor: one draw by index, record it (training)
+                bet_level = bet.select_level(
+                    true_count=true_count, decks_remaining=decks_remaining, bankroll=bankroll
+                )
+                desired = bet.levels[bet_level]
+            else:  # plain bettor (analytic baselines): no action index to record
+                bet_level = None
+                desired = bet.bet(
+                    true_count=true_count, decks_remaining=decks_remaining, bankroll=bankroll
+                )
+            wager = min(_clamp(desired, wager_lo, spread_hi), bankroll)  # never wager more than held
 
             result = HandSimulator(cfg, deck, play).play_hand(
                 session_id="b", bankroll=bankroll, bet_size=wager, hands_played=hands_played
@@ -245,6 +276,7 @@ class SessionEnv:
                     bankroll_after=bankroll_after,
                     log_reward=log_reward,
                     done=done,
+                    bet_level=bet_level,
                 )
             )
             bankroll = bankroll_after
