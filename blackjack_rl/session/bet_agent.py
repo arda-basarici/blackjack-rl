@@ -199,6 +199,18 @@ class BetAgent:
         ]
 
 
+def greedy_bet_curve(
+    agent: BetAgent, counts: Sequence[int], *, bankroll: float, decks_remaining: float
+) -> dict[int, float]:
+    """The agent's greedy wager at each true count (fixed bankroll + shoe depth) — the bet-vs-count
+    diagnostic: overlaid on the analytic Kelly curve (B2d-3) and watched forming over training (the
+    checkpoint probe). Greedy, so it reads the *policy*, not the exploring behaviour."""
+    return {
+        c: agent.bet(true_count=float(c), decks_remaining=decks_remaining, bankroll=bankroll)
+        for c in counts
+    }
+
+
 def session_to_transitions(
     capture: SessionCapture,
     *,
