@@ -44,8 +44,11 @@ class BetTrainConfig:
     epsilon[_*]       : exploration rate over the bet menu / decaying schedule (reuses schedules.py).
     hidden            : QNetwork hidden-layer sizes.
     lr / lr_schedule / lr_end : Adam step and its (optional) decay (CONCEPTS §26).
-    gamma             : TD discount — 1.0 (the session return is the undiscounted sum of per-hand
-                        log-increments = log(W_final/W_0), the Kelly objective).
+    gamma             : TD discount. **Default 0.0 (myopic).** Kelly is the per-hand log-optimum, so in
+                        the growth regime (ruin dormant) the bandit objective learns the count->bet ramp
+                        at minimum variance; gamma=1 telescopes the ~1000-hand return and DIVERGES (B2d-3
+                        finding). The *ruin* regime needs an intermediate gamma in (0,1) — its own value,
+                        not yet characterized — to value ruin-avoidance; set it per-run, never 1.0.
     batch_size / buffer_capacity / warmup / updates_per_step / train_every / target_sync_every /
     target_tau / double_dqn : the standard deep-Q stabilizers (reused from dqn.deep_q).
     ruin_penalty      : finite stand-in for a total-wipeout hand's ``-inf`` log-reward (reward shaping).
@@ -67,7 +70,7 @@ class BetTrainConfig:
     lr: float = 1e-3
     lr_schedule: str = "constant"
     lr_end: float = 1e-5
-    gamma: float = 1.0
+    gamma: float = 0.0
     batch_size: int = 128
     buffer_capacity: int = 50_000
     warmup: int = 1_000

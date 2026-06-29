@@ -158,7 +158,8 @@ class BetAgent:
         self.epsilon = epsilon
         self.num_decks = num_decks
         self.bankroll_scale = bankroll_scale
-        self.q_net = QNetwork(FEATURE_DIM, len(self.levels), hidden)
+        self.hidden: tuple[int, ...] = tuple(int(h) for h in hidden)  # self-describing for persistence
+        self.q_net = QNetwork(FEATURE_DIM, len(self.levels), self.hidden)
 
     def encode_state(self, true_count: float, decks_remaining: float, bankroll: float) -> list[float]:
         """This agent's state vector — :func:`encode_bet_state` bound to its ``num_decks`` /
