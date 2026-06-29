@@ -12,12 +12,14 @@ import pytest
 from blackjack_rl.session.references import (
     CountAccumulator,
     CountEdge,
+    EdgeReference,
     IndexPlay,
     IndexPlayTable,
     accumulate_edges,
     edge_by_count,
     index_plays,
     kelly_bet_curve,
+    load_edge_reference,
 )
 
 VALID_ACTIONS = {"hit", "stand", "double", "split", "surrender", "none"}
@@ -142,6 +144,29 @@ def test_kelly_curve_increases_with_edge():
     edges = {1: _edge(1, 0.005, 1.3), 5: _edge(5, 0.025, 1.3)}
     curve = kelly_bet_curve(edges)
     assert curve[5] > curve[1] > 0.0
+
+
+# --- load_edge_reference (the committed canonical reference) --------------------------
+
+def test_load_edge_reference_contract():
+    """The committed reference round-trips to int-keyed edges + kelly_curve with provenance — the
+    single source the Kelly baseline and the figure read (no dependence on a git-ignored run)."""
+    ref = load_edge_reference()
+
+    assert isinstance(ref, EdgeReference)
+    assert ref.edges and ref.kelly_curve
+    assert all(isinstance(tc, int) for tc in ref.edges)        # JSON string keys -> int
+    assert all(isinstance(tc, int) for tc in ref.kelly_curve)
+    assert all(isinstance(e, CountEdge) and e.true_count == tc for tc, e in ref.edges.items())
+    # provenance is recorded so any run can cite which measurement it sized from
+    assert ref.provenance.get("git_hash") and ref.provenance.get("n_total", 0) > 0
+
+
+def test_load_edge_reference_kelly_matches_edges():
+    """The stored kelly_curve is exactly the full-Kelly transform of the stored edges — the file is
+    self-consistent, so the baseline sizes from the same numbers the figure plots."""
+    ref = load_edge_reference()
+    assert ref.kelly_curve == kelly_bet_curve(ref.edges)
 
 
 # --- index_plays ---------------------------------------------------------------------

@@ -1,14 +1,14 @@
 """Signature figure for the edge-by-count measurement (B2a, commit ii).
 
-Renders the player edge vs Hi-Lo true count from a saved ``edge_by_count`` artifact (the runner,
-``measure_edge_by_count.py``): edge% with 95% CIs on the left axis, the implied full-Kelly fraction
-on a twin right axis, the break-even count, and a shaded low-n tail where buckets are too sparse to
-trust. The figure is a *derived view* — regenerated from the artifact, saved beside it under
-``runs/`` (git-ignored), never committed.
+Renders the player edge vs Hi-Lo true count from the committed edge-by-count reference (produced by
+``measure_edge_by_count.py``, at ``core.paths.EDGE_REFERENCE_PATH``): edge% with 95% CIs on the left
+axis, the implied full-Kelly fraction on a twin right axis, the break-even count, and a shaded low-n
+tail where buckets are too sparse to trust. The figure is a *derived view* — regenerated from the
+reference, written to ``runs/`` (git-ignored), never committed.
 
-Run from the repo root (defaults to the newest edge-by-count run; pass a run dir to pin one):
+Run from the repo root (defaults to the committed reference; pass a reference json path to pin one):
 
-    .venv\\Scripts\\python.exe scripts/plot_edge_by_count.py [runs/<run_id>]
+    .venv\\Scripts\\python.exe scripts/plot_edge_by_count.py [path/to/reference.json]
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ import matplotlib
 matplotlib.use("Agg")  # headless: render to file, no display
 import matplotlib.pyplot as plt
 
-from blackjack_rl.core.paths import RUNS_DIR
+from blackjack_rl.core.paths import EDGE_REFERENCE_PATH, RUNS_DIR
 
 plt.rcParams.update({"figure.dpi": 160, "font.size": 10, "font.family": "sans-serif"})
 
@@ -29,18 +29,6 @@ DISPLAY_MIN_N = 2_000      # drop the wild singleton tails (TC |.|>~12), unreada
 RELIABLE_MIN_N = 50_000    # at/above this a bucket's CI is tight; below it we fade + shade as low-n
 EDGE_COLOR = "#1f5fbf"
 KELLY_COLOR = "#c0392b"
-
-
-def latest_edge_run(runs_dir: Path) -> Path:
-    """Newest run dir holding an ``edge_by_count`` artifact (timestamp prefix sorts lexically)."""
-    candidates = [
-        d for d in runs_dir.iterdir()
-        if d.is_dir() and (d / "record.json").exists()
-        and json.loads((d / "record.json").read_text(encoding="utf-8")).get("kind") == "edge_by_count"
-    ]
-    if not candidates:
-        raise FileNotFoundError(f"no edge_by_count run under {runs_dir} — run measure_edge_by_count.py first")
-    return max(candidates, key=lambda d: d.name)
 
 
 def break_even_tc(points: list[dict]) -> float | None:
@@ -138,9 +126,10 @@ def render(record: dict, out_path: Path) -> Path:
 
 
 def main() -> None:
-    run_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else latest_edge_run(RUNS_DIR)
-    record = json.loads((run_dir / "record.json").read_text(encoding="utf-8"))
-    out = render(record, run_dir / "edge_by_count.png")
+    ref_path = Path(sys.argv[1]) if len(sys.argv) > 1 else EDGE_REFERENCE_PATH
+    record = json.loads(ref_path.read_text(encoding="utf-8"))
+    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    out = render(record, RUNS_DIR / "edge_by_count.png")  # derived view, git-ignored
     print(f"figure -> {out}")
 
 

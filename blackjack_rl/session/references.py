@@ -11,12 +11,15 @@ agent trains in (``session.env``), so the reference and the agent are measured o
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from math import sqrt
+from pathlib import Path
 
 from simulator.game_state import Action
 from strategies.basic_strategy import BasicStrategy
 
+from blackjack_rl.core.paths import EDGE_REFERENCE_PATH
 from blackjack_rl.session.bet_agent import FlatBet
 from blackjack_rl.session.env import SessionConfig, run_sessions
 
@@ -181,6 +184,49 @@ def kelly_bet_curve(edges: dict[int, CountEdge]) -> dict[int, float]:
         fraction = edge.mean_return / edge.variance if edge.variance > 0 else 0.0
         curve[true_count] = max(0.0, fraction)
     return curve
+
+
+@dataclass(frozen=True)
+class EdgeReference:
+    """The committed edge-by-count reference: per-count measured ``edges`` + the implied full-Kelly
+    ``kelly_curve``, plus the ``provenance`` of the run that produced them (DESIGN D17, B2c).
+
+    This is the **single canonical source** the Problem-B Kelly baseline (``KellyBet``) sizes from and
+    the signature figure plots — frozen and committed (``core.paths.EDGE_REFERENCE_PATH``) rather than
+    read from a git-ignored ``runs/`` artifact, so a reference everything is measured against cannot
+    silently drift. Regenerate in place with ``scripts/measure_edge_by_count.py``.
+    """
+
+    edges: dict[int, CountEdge]
+    kelly_curve: dict[int, float]
+    provenance: dict
+
+
+def load_edge_reference(path: Path | str = EDGE_REFERENCE_PATH) -> EdgeReference:
+    """Load the committed edge-by-count reference JSON (DESIGN D17, B2c).
+
+    Reconstructs the int-keyed ``edges`` and ``kelly_curve`` (the JSON keys them by string) and keeps
+    the provenance fields (run id / timestamp / git hash / config / anchor check) so any run that uses
+    the reference can record exactly which measurement it sized from.
+    """
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    edges = {
+        int(e["true_count"]): CountEdge(
+            true_count=int(e["true_count"]),
+            mean_return=e["mean_return"],
+            variance=e["variance"],
+            std_error=e["std_error"],
+            n=int(e["n"]),
+        )
+        for e in data["edges"]
+    }
+    kelly_curve = {int(tc): f for tc, f in data["kelly_curve"].items()}
+    provenance = {
+        k: data[k]
+        for k in ("run_id", "timestamp", "git_hash", "config", "n_total", "anchor_check")
+        if k in data
+    }
+    return EdgeReference(edges=edges, kelly_curve=kelly_curve, provenance=provenance)
 
 
 @dataclass(frozen=True)

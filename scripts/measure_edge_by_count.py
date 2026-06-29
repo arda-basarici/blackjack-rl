@@ -1,4 +1,4 @@
-"""High-n edge-by-count measurement — the committed B2a artifact (deferred from B1).
+"""High-n edge-by-count measurement — produces the canonical committed reference (B2a/B2c).
 
 Fans the flat-bet basic-strategy edge-by-count measurement (``session.references``) across CPU cores
 and merges the per-worker Welford partials losslessly (Chan's parallel variance, ``CountAccumulator.
@@ -15,8 +15,10 @@ Run from the repo root (needs the Phase-2 simulator on the path, like any run):
 
     .venv\\Scripts\\python.exe scripts/measure_edge_by_count.py
 
-Progress streams to ``logs/live.log`` (tail it: ``Get-Content .\\logs\\live.log -Wait``). The artifact
-lands under ``runs/`` with full provenance (run_id / timestamp / git_hash via ``save_run``).
+Progress streams to ``logs/live.log`` (tail it: ``Get-Content .\\logs\\live.log -Wait``). The result
+is written to the **committed** reference ``core.paths.EDGE_REFERENCE_PATH`` (regenerated in place,
+with full provenance: run_id / timestamp / git_hash) — the single source the Kelly baseline and the
+signature figure both read (DESIGN D17), not a git-ignored ``runs/`` artifact.
 """
 from __future__ import annotations
 
@@ -25,8 +27,8 @@ import sys
 from datetime import datetime
 from multiprocessing import Pool
 
-from blackjack_rl.core.paths import LOGS_DIR, RUNS_DIR
-from blackjack_rl.core.persistence import save_run
+from blackjack_rl.core.paths import EDGE_REFERENCE_PATH, LOGS_DIR
+from blackjack_rl.core.persistence import git_hash
 from blackjack_rl.session.env import problem_b_config
 from blackjack_rl.session.references import (
     CountAccumulator,
@@ -66,6 +68,22 @@ def _log(line: str) -> None:
     LOGS_DIR.mkdir(exist_ok=True)
     with open(LOGS_DIR / "live.log", "a", encoding="utf-8") as f:
         f.write(msg + "\n")
+
+
+def _write_reference(record: dict, path) -> None:
+    """Write the canonical edge-by-count reference to ``path``, stamping provenance (run_id /
+    timestamp / git_hash) as ``save_run`` does — but to a **stable committed file**, regenerated in
+    place (overwrite), with git as the safety net. The reference is data the package ships (B2c, D17),
+    not a never-overwrite ``runs/`` artifact, so the bet baseline and the figure read one source."""
+    now = datetime.now()
+    full = {
+        "run_id": f"edge-by-count_seed{BASE_SEED}_{now.strftime('%Y%m%d-%H%M%S')}",
+        "timestamp": now.isoformat(timespec="seconds"),
+        "git_hash": git_hash(),
+        **record,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(full, indent=2, default=str), encoding="utf-8")
 
 
 def _build_record(merged: CountAccumulator, hands_per_worker: int, elapsed_s: float) -> dict:
@@ -148,9 +166,8 @@ def main() -> None:
             f"± {e['std_error'] * 100:.3f}%   (n={e['n']:,})"
         )
 
-    run_id = f"{start.strftime('%Y%m%d-%H%M%S')}_edge-by-count_seed{BASE_SEED}"
-    run_dir = save_run(RUNS_DIR, record, run_id=run_id)
-    _log(f"saved -> {run_dir}  ({elapsed:.0f}s, {merged.n_total:,} hands)")
+    _write_reference(record, EDGE_REFERENCE_PATH)
+    _log(f"saved -> {EDGE_REFERENCE_PATH}  ({elapsed:.0f}s, {merged.n_total:,} hands)")
     print(json.dumps(ac, indent=2))
 
 
