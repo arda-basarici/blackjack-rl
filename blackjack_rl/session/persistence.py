@@ -54,16 +54,17 @@ def save_bet_run(
     return run_dir
 
 
-def load_bet_agent(run_dir: Path | str) -> BetAgent:
-    """Reconstruct a trained ``BetAgent`` from a saved run dir (``record.json`` + ``model.pt``).
-
-    Rebuilds the shell from the record's ``construction`` block, loads weights onto CPU, and returns it
-    greedy (``epsilon=0``, eval mode) — the deterministic policy for evaluation. Mirrors
-    ``dqn.embedding.load_agent``."""
-    run_dir = Path(run_dir)
+def _load_record(run_dir: Path) -> dict[str, Any]:
+    """Read a run's ``record.json`` and validate at the boundary (every run dir looks alike)."""
     record = json.loads((run_dir / "record.json").read_text(encoding="utf-8"))
-    if record.get("kind") != "bet_agent":  # validate at the boundary: every run dir looks alike
+    if record.get("kind") != "bet_agent":
         raise ValueError(f"{run_dir} is not a bet_agent run (kind={record.get('kind')!r})")
+    return record
+
+
+def _rebuild_and_load(record: dict[str, Any], weights: Path) -> BetAgent:
+    """Rebuild the agent *shell* from the record's ``construction`` block, load ``weights`` onto CPU, and
+    return it greedy (``epsilon=0``, eval mode) — the deterministic policy for evaluation."""
     c = record["construction"]
     agent = BetAgent(
         levels=c["levels"],
@@ -72,6 +73,28 @@ def load_bet_agent(run_dir: Path | str) -> BetAgent:
         num_decks=c["num_decks"],
         bankroll_scale=c["bankroll_scale"],
     )
-    agent.q_net.load_state_dict(torch.load(run_dir / "model.pt", map_location="cpu"))
+    agent.q_net.load_state_dict(torch.load(weights, map_location="cpu"))
     agent.q_net.eval()
     return agent
+
+
+def load_bet_agent(run_dir: Path | str) -> BetAgent:
+    """Reconstruct the *final* trained ``BetAgent`` from a saved run dir (``record.json`` + ``model.pt``).
+    Mirrors ``dqn.embedding.load_agent``."""
+    run_dir = Path(run_dir)
+    return _rebuild_and_load(_load_record(run_dir), run_dir / "model.pt")
+
+
+def load_bet_checkpoint(run_dir: Path | str, session: int) -> BetAgent:
+    """Reconstruct a *mid-training* ``BetAgent`` from a saved trajectory checkpoint
+    (``checkpoints/ckpt_<session>.pt``) — same shell as the final model, the weights at that session.
+
+    Used to interrogate a specific point in the training orbit (e.g. a near-Kelly ramp the final policy
+    didn't keep — Test 11 / H3). Fails loudly with the available sessions if the checkpoint is absent."""
+    run_dir = Path(run_dir)
+    weights = run_dir / "checkpoints" / f"ckpt_{session:05d}.pt"
+    if not weights.exists():
+        ckpt_dir = run_dir / "checkpoints"
+        have = sorted(p.stem.removeprefix("ckpt_") for p in ckpt_dir.glob("ckpt_*.pt")) if ckpt_dir.exists() else []
+        raise FileNotFoundError(f"no checkpoint for session {session} in {run_dir} (have: {have})")
+    return _rebuild_and_load(_load_record(run_dir), weights)

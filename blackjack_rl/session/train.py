@@ -98,6 +98,7 @@ def train_bet(
     config: BetTrainConfig,
     progress_every: int | None = None,
     on_checkpoint: Callable[[dict], None] | None = None,
+    on_snapshot: Callable[[int, dict], None] | None = None,
 ) -> BetAgent:
     """Train a ``BetAgent`` by deep Q-learning over ``config.n_sessions`` sessions of Problem B, with
     **fixed ``BasicStrategy`` play** — isolating the betting lever (rung 3 of the D17 ladder).
@@ -109,7 +110,10 @@ def train_bet(
     bettor transitions and pushed; after warm-up, ``updates_per_step`` gradient steps fire every
     ``train_every`` transitions, with the target net hard-synced every ``target_sync_every`` steps (or
     soft-updated when ``target_tau > 0``). Anneals epsilon by the schedule and emits a learning curve
-    (loss + the bet-vs-count probe) via ``on_checkpoint``. Returns the trained agent.
+    (loss + the bet-vs-count probe) via ``on_checkpoint``. ``on_snapshot(session, state_dict)`` — if
+    given — fires at the *same* cadence with a CPU clone of the q-net weights, so a caller can persist the
+    trajectory's checkpoints (the policy *wanders through* good ramps it doesn't keep — Test 11); kept a
+    separate seam so ``on_checkpoint`` stays a JSON-safe learning-curve point. Returns the trained agent.
     """
     random.seed(config.seed)
     torch.manual_seed(config.seed)
@@ -200,6 +204,8 @@ def train_bet(
                     "recent_loss": round(avg_loss, 6) if loss_count else None,
                     "bet_by_count": {c: round(w, 3) for c, w in curve.items()},
                 })
+            if on_snapshot is not None:
+                on_snapshot(done, {k: v.detach().cpu().clone() for k, v in agent.q_net.state_dict().items()})
             loss_sum, loss_count = 0.0, 0
 
     return agent

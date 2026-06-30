@@ -16,6 +16,8 @@ from __future__ import annotations
 import argparse
 from datetime import datetime
 
+import torch
+
 from blackjack_rl.core.paths import LOGS_DIR, RUNS_DIR
 from blackjack_rl.session.bet_agent import greedy_bet_curve
 from blackjack_rl.session.env import growth_config, ruin_config
@@ -51,6 +53,10 @@ def main() -> None:
     ap.add_argument("--scale", type=float, default=1.0)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--lr-decay", action="store_true")  # linear lr -> 1e-5 over the run (else constant)
+    ap.add_argument("--lr-harmonic", action="store_true")  # harmonic (1/t) lr decay -> lr_end (Robbins–Monro)
+    ap.add_argument("--eps-decay", action="store_true")  # linear ε eps-start -> 0 over the run
+    ap.add_argument("--eps-start", type=float, default=0.5)  # start ε for the decay (explore early)
+    ap.add_argument("--checkpoints", action="store_true")  # persist q-net weights at every probe checkpoint
     args = ap.parse_args()
 
     config = BetTrainConfig(
@@ -64,7 +70,9 @@ def main() -> None:
         buffer_capacity=args.buffer,
         reward_scale=args.scale,
         lr=args.lr,
-        lr_schedule="linear" if args.lr_decay else "constant",
+        lr_schedule=("harmonic" if args.lr_harmonic else "linear" if args.lr_decay else "constant"),
+        epsilon_schedule="linear" if args.eps_decay else "constant",
+        epsilon_start=args.eps_start,  # ε-decay goes eps_start -> 0 (explore early, exploit late)
     )
     tag = f"{args.regime}/b{args.batch}/s{args.seed}"
     _log(
@@ -73,13 +81,20 @@ def main() -> None:
     )
 
     learning_curve: list[dict] = []
+    checkpoints: list[tuple[int, dict]] = []  # (session, cpu state_dict) — the training trajectory
 
     def on_checkpoint(info: dict) -> None:
         _log(f"[{tag}] {info['session']} loss={info['recent_loss']} | bet[{_ramp(info['bet_by_count'])}]")
         learning_curve.append(info)
 
+    def on_snapshot(session: int, state_dict: dict) -> None:
+        checkpoints.append((session, state_dict))
+
     start = datetime.now()
-    agent = train_bet(config, progress_every=max(1, args.sessions // 20), on_checkpoint=on_checkpoint)
+    agent = train_bet(
+        config, progress_every=max(1, args.sessions // 20), on_checkpoint=on_checkpoint,
+        on_snapshot=on_snapshot if args.checkpoints else None,
+    )
     elapsed = (datetime.now() - start).total_seconds()
 
     final_curve = greedy_bet_curve(
@@ -89,9 +104,16 @@ def main() -> None:
         "elapsed_s": round(elapsed, 1),
         "final_curve": {str(c): final_curve[c] for c in PROBE_COUNTS},
         "learning_curve": learning_curve,
+        "checkpoint_sessions": [s for s, _ in checkpoints],
     }
     run_id = f"{start:%Y%m%d-%H%M%S}_bet-agent_{args.regime}_b{args.batch}_{args.sessions}sess"
     run_dir = save_bet_run(RUNS_DIR, agent, config, metrics, run_id=run_id)
+    if checkpoints:  # the trajectory weights, beside the final model.pt (load via load_bet_checkpoint)
+        ckpt_dir = run_dir / "checkpoints"
+        ckpt_dir.mkdir(exist_ok=True)
+        for session, state_dict in checkpoints:
+            torch.save(state_dict, ckpt_dir / f"ckpt_{session:05d}.pt")
+        _log(f"  saved {len(checkpoints)} trajectory checkpoints -> {ckpt_dir}")
     _log(f"train_bet_agent DONE ({elapsed:.0f}s) final bet[{_ramp(final_curve)}]  saved -> {run_dir}")
 
 

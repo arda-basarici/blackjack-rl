@@ -305,8 +305,94 @@ policy — bet minimum where you can't estimate the rare states.)
 - **double-DQN *hurts* neutral consistency** (adds noise) — it only helps the coverage-limited high end we
   can't stabilize anyway, so for the neutral target prefer **OFF**.
 - **Lower *constant* lr** (1e-4): smaller Adam steps → less argmax-jitter → steadier neutral lock; better
-  than lr-*decay* (which freezes a random snapshot). *[2×2×2 running: batch{256,512} × double{on,off} ×
-  lr{1e-4,1e-5}, scale50.]*
+  than lr-*decay* (which freezes a random snapshot) — confirmed in the sweep below.
+
+**Results (γ>0 ruin sweep, single-seed; "neutral" = the `[−4..+2]` region, want ~`1`; final = one
+checkpoint, so for *wandering* runs it's partly luck — read the neutral column):**
+
+| run | dbl | scale | batch | lr | n | final (−4…+8) | neutral | read |
+|---|---|---|---|---|---|---|---|---|
+| `dbloff` | off | 1 | 512 | 1e-3 | 1k | `5 5 5 5 5 5 5` | `5 5 5 5` | rigid flat (scale1) |
+| `dblon` | on | 1 | 512 | 1e-3 | 1k | `5 5 5 2 2 2 2` | `5 5 5 2` | inverted |
+| `dbloff_s100` | off | 100 | 512 | 1e-3 | 1k | `8 1 1 5 1 5 5` | `8 1 1 5` | wander snapshot |
+| `dblon_s100` | on | 100 | 512 | 1e-3 | 1k | `1 1 1 1 1 5 6` | `1 1 1 1` | ramp-ish |
+| `dbloff_s50` | off | 50 | 512 | 1e-3 | 1k | `1 1 1 1 3 1 1` | `1 1 1 1` | clean neutral |
+| `dblon_s50` | on | 50 | 512 | 1e-3 | 1k | `2 2 2 2 2 2 2` | `2 2 2 2` | flat-2 |
+| `dblon_decay` | on | 1 | 512 | dec | 1k | `1 1 1 1 1 1 1` | `1 1 1 1` | flat-1 (froze) |
+| `dblon_s100_decay` | on | 100 | 512 | dec | 1k | `1 1 8 1 1 1 4` | `1 1 8 1` | neutral blip |
+| `dbloff_s50_lr4` | off | 50 | 512 | 1e-4 | 2k | `3 3 1 1 1 1 3` | `3 3 1 1` | mostly clean |
+| `dblon_s50_lr4` | on | 50 | 512 | 1e-4 | 2k | `1 1 2 1 1 3 3` | `1 1 2 1` | clean-ish |
+| **`dbloff_s50_b256_lr4`** | off | 50 | 256 | 1e-4 | 2k | `1 1 1 1 1 1 1` | `1 1 1 1` | **cleanest** ✓ |
+| `dblon_s50_b256_lr4` | on | 50 | 256 | 1e-4 | 2k | `4 3 3 1 6 6 6` | `4 3 3 1` | neutral blippy (dbl) |
+| `*_lr5` (×4) | – | 50 | 256/512 | 1e-5 | 2k | `1 1 1 1 1 1 1` | `1 1 1 1` | flat-1 (under-converged) |
+| `ruin_train` | on | 1 | 2048 | 1e-3 | 1.5k | `4 4 4 4 4 4 4` | `4 4 4 4` | flat-4 (scale1) |
+| **Kelly** | | | | | | `1 1 1 2 5 8 8` | `1 1 1 2` | target |
+
+**Conclusions:** (1) **scale1 → no structure** (the scale gate; even batch2048 `ruin_train` is flat-4);
+(2) **scale50/100 → count structure forms but *wanders*** (finals vary); (3) **lr1e-4 = sweet spot** (clean
+neutral + surviving high-end attempts), **lr1e-5 → under-converged flat-1**; (4) **double OFF cleaner** than
+ON for the neutral target; (5) **batch256 ≈ batch512** for the neutral (cheaper). **Best cell for "consistent
+around 0": `scale50 + double-OFF + lr1e-4` (batch256).** High-count *magnitude* stays coverage-bound (#10).
+
+---
+
+## Test 11 — Harmonic lr CONFIRMS §33 (orbit collapse) + "RL VISITS Kelly but won't hold it"
+
+**2×2×2** (double{on,off} × lr-harmonic{on,off} × eps-decay{on,off}; ruin/γ0.95/scale50/batch512/lr1e-3/n2000).
+"neutral" = `[−4..+2]` held across the last 4 ckpts.
+
+| run | dbl | harm | eps | final (−4…+8) | neutral | loss | read |
+|---|---|---|---|---|---|---|---|
+| `dblon_base` | on | – | – | `2 2 2 2 2 2 2` | 1/1/1/**2** | 0.27 | **orbits** flat-1↔2 |
+| `dblon_harm` | on | ✓ | – | `1 1 1 1 3 1 3` | **3**/3/1/1 | 0.17 | harmonic, double blips |
+| `dblon_eps` | on | – | ✓ | `1 1 1 1 1 1 1` | 1/**2**/1/1 | 0.12 | orbits, clean final |
+| **`dblon_harm_eps`** | on | ✓ | ✓ | `1 1 1 1 1 1 1` | **1/1/1/1** ✓ | **0.086** | solid neutral |
+| `dbloff_base` | off | – | – | `1 1 1 1 1 1 1` | **2**/1/1/1 | 0.25 | orbits, settles |
+| **`dbloff_harm`** | off | ✓ | – | `1 1 1 1 2 2 2` | **1/1/1/1** ✓ | 0.17 | solid + faint ramp |
+| `dbloff_eps` | off | – | ✓ | `2 2 2 2 2 2 2` | 1/1/1/**2** | 0.13 | orbits (flat-2 end) |
+| **`dbloff_harm_eps`** | off | ✓ | ✓ | `1 1 1 1 2 2 2` | **1/1/1/1** ✓ | **0.093** | solid + faint ramp |
+
+**Harmonic confirms the Robbins–Monro prediction (§33):** every rock-solid-neutral cell is **harmonic**;
+constant-lr cells still flip flat-1↔flat-2 at the end (orbit never closes). Harmonic also **slashes the
+loss** (~0.09 vs ~0.27 — lr collapse tightens the fit). **ε-decay alone doesn't kill the orbit**
+(`dbloff_eps` flips to flat-2 at the end) — it cuts exploration noise; harmonic *collapses*, ε-decay
+*cleans* (complementary). double-OFF+harmonic shows a **faint high-end ramp** (`+4/6/8`→2–3).
+
+**THE DISCOVERY (Arda, watching live): the orbit PASSES THROUGH near-Kelly ramps mid-run.** Scan of ALL
+checkpoints vs Kelly `1 1 1 2 5 8 8` (L1):
+- `dblon_base` **sess 700** = `1 1 1 2 5 6 8` (**dist 2 — essentially Kelly**); sess 400 = `2 1 1 1 5 8 8`.
+- `ruin_dblon_s100_decay` hit ramp-shape **10/18** ckpts; `ruin_dblon_s100` **9/18**.
+- (reproducibility: `dblon_base` ≡ `ruin_dblon_s50` for sess≤1000 — same seed.)
+
+So **"RL converges to Flat" was partly an artifact of reading the FINAL checkpoint** — the trajectory
+*visits* Kelly. (We only saved final weights → the sess-700 net is gone; curve logged, not the weights.)
+
+### Open hypotheses to investigate (H-series) — the "why visits but won't hold" mechanism
+
+**H1 — The Kelly ramp is NOT a loss-minimum; flat is the attractor; the ramp is a noise-driven transient.**
+At the rare high counts, sparse data can't confidently support a high-count premium → loss-optimal value
+there is ~flat → nothing holds the orbit at the ramp. *Evidence in hand:* **harmonic (noise-averaging)
+collapses to flat, not the ramp** → the ramps are exactly the part that averages away.
+
+**H2 — But the ramp signal is REAL (above chance), just weaker than the flat attractor.** A random argmax
+curve over 8 levels almost never comes out monotone-rising, yet scale100+double ramps 9–10/18 → a genuine
+count gradient pulls toward the ramp. Two competing forces: weak "high counts +EV → ramp" gradient vs
+strong "sparse data → flat" attractor + noise. scale100/double *strengthen* the signal but don't make it win.
+
+**H3 (discriminating — DIAGNOSTIC, not selection) — is the ramp a genuinely-better-but-unrewarded policy,
+or a noise excursion?** Test: reproduce + capture the sess-700 ramp (deterministic, seed 0), four-axis eval.
+- *higher growth + tolerable ruin* → the ramp IS better, but its advantage sits **below the per-hand noise
+  floor it's estimated from** → TD can't separate ramp from flat → **"the signal distinguishing Kelly from
+  flat is smaller than the noise."** (the coverage/objective wall, sharpened)
+- *worse ruin / no better growth* → flat is correctly optimal; the "ramps" are partly a 1-D-slice artifact.
+
+**Investigation plan:** (1) add checkpoint-saving (negligible — ~40KB/ckpt, regenerable via seed);
+(2) reproduce + capture sess-700 `dblon_s50`; (3) four-axis eval the captured ramp (H3); (4) optional:
+residence-time / checkpoint-autocorrelation to quantify the ramp-attractor strength (H2). **NOTE: the 3
+evals running now are on FINAL (flat-ish) policies — they answer the double-OFF over-betting Q, NOT the
+ramp (not in the final weights).** *Selection caveat (if a captured ramp ever becomes the deliverable, not
+just a diagnostic): pick the checkpoint by a held-out val metric, NEVER by closeness-to-Kelly, and report
+best-vs-final — else it's selection bias.*
 
 ---
 

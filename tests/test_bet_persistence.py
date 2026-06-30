@@ -6,7 +6,12 @@ import torch
 
 from blackjack_rl.session.bet_agent import BetAgent
 from blackjack_rl.session.env import growth_config
-from blackjack_rl.session.persistence import construction_of, load_bet_agent, save_bet_run
+from blackjack_rl.session.persistence import (
+    construction_of,
+    load_bet_agent,
+    load_bet_checkpoint,
+    save_bet_run,
+)
 from blackjack_rl.session.train import BetTrainConfig
 
 _STATES = [
@@ -57,6 +62,39 @@ def test_loaded_agent_is_greedy(tmp_path):
     cfg = BetTrainConfig(session=growth_config(), n_sessions=5)
     run_dir = save_bet_run(tmp_path, agent, cfg, metrics={}, run_id="eps")
     assert load_bet_agent(run_dir).epsilon == 0.0
+
+
+def _same_weights(a: BetAgent, b: BetAgent) -> bool:
+    sa, sb = a.q_net.state_dict(), b.q_net.state_dict()
+    return all(torch.equal(sa[k], sb[k]) for k in sa)
+
+
+def test_load_checkpoint_reproduces_that_session(tmp_path):
+    """A trajectory checkpoint loads the weights at *that* session — not the final model."""
+    final = _make_agent()
+    cfg = BetTrainConfig(session=growth_config(), n_sessions=5)
+    run_dir = save_bet_run(tmp_path, final, cfg, metrics={}, run_id="traj")
+
+    torch.manual_seed(99)  # a distinct mid-training snapshot (different weights than the final)
+    mid = BetAgent(levels=(1, 2, 4, 8), hidden=(32, 16), num_decks=6.0, bankroll_scale=400.0)
+    ckpt_dir = run_dir / "checkpoints"
+    ckpt_dir.mkdir()
+    torch.save({k: v.clone() for k, v in mid.q_net.state_dict().items()}, ckpt_dir / "ckpt_00700.pt")
+
+    loaded = load_bet_checkpoint(run_dir, 700)
+    assert _same_weights(loaded, mid)  # loaded the checkpoint...
+    assert not _same_weights(loaded, final)  # ...NOT the final model
+    assert loaded.epsilon == 0.0  # greedy, like load_bet_agent
+
+
+def test_load_checkpoint_missing_session_fails_loud(tmp_path):
+    agent = _make_agent()
+    cfg = BetTrainConfig(session=growth_config(), n_sessions=5)
+    run_dir = save_bet_run(tmp_path, agent, cfg, metrics={}, run_id="miss")
+    (run_dir / "checkpoints").mkdir()
+    torch.save(agent.q_net.state_dict(), run_dir / "checkpoints" / "ckpt_00100.pt")
+    with pytest.raises(FileNotFoundError, match="session 700"):
+        load_bet_checkpoint(run_dir, 700)
 
 
 def test_load_rejects_non_bet_run(tmp_path):
