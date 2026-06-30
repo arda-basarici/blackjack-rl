@@ -27,7 +27,10 @@ lever fixes it*.
 | 4 | Real-reward lever sweep | exploratory | **batch** breaks the flatline (intermittently) |
 | 5 | `torch_threads` benchmark | decisive | 1 thread fastest |
 | 6 | Batch-threshold ladder (@2500) | exploratory | ramp needs batch ≥~2048 but does **not stabilize** (wanders flat↔ramp) |
-| 7 | Long runs (batch 4096/2048 @5000) | exploratory | **in progress** — does more batch+data stabilize it? |
+| 7 | Long runs (batch 4096/2048 @5000) | exploratory | converges to **flat-1** (≈Flat) — not Kelly |
+| 8 | Stability levers @γ=0 (double/Polyak/buffer) | exploratory | double/Polyak **no-op at γ=0**; buffer rules out *forgetting* |
+| 9 | **Four-axis performance evals (deliverable)** | **central** | learned bettor **loses to / becomes Flat, never Kelly** (CI-backed) — *at γ=0* |
+| 10 | **γ>0: double-DQN, scale, Huber-delta** | exploratory | **revises 4 & 9** — scale NOT cosmetic (Huber); count-dep *forms* at γ>0; high end = coverage |
 | — | Prior committed baselines (B1–B2c) | committed | reference index |
 
 ---
@@ -187,12 +190,123 @@ to hold it.** Stabilising the argmax is the real open problem (→ Test 7; conti
 
 ---
 
-## Test 7 — Long runs: does more batch + data stabilise the ramp? (IN PROGRESS)
+## Test 7 — Long runs: does more batch + data converge? (DONE)
 
-batch 4096 (seeds 0, 1) and batch 2048, all **5000 sessions**, γ0/scale100 — does more gradient-averaging
-+ more data *converge* the ramp instead of oscillating? These **persist the trained agent** (`.pt` =
-weights + construction + provenance) for the four-axis eval. Status at last check: ~12–37% done, curves
-still noisy/wandering. *Append finals + the four-axis eval when complete.*
+batch 4096 (seeds 0, 1) + batch 2048, all **5000 sessions**, **plain γ=0 DQN** (no double-DQN, no Polyak —
+hard target sync, 50k buffer), scale 100. Final curves — **all identical:**
+
+| run | final curve (−4…+8) |
+|---|---|
+| b4096_s0 / b4096_s1 / b2048_s0 | `1 1 1 1 1 1 1` |
+| Kelly | `1 1 1 2 5 8 8` |
+
+**Read — this resolves the wandering.** With enough data + batch it **stops wandering and converges — to
+flat-minimum (flat-1), NOT Kelly.** The wandering in shorter runs was the un-converged transient. *Why:*
+at γ=0, betting >1 only pays at the **rare** high counts; at the common low/neutral counts it's −EV
+(table-min tax + variance). Averaged over the (low-count-dominated) natural distribution, the minimum wins
+almost everywhere and the rare high counts can't pull the argmax up. So the converged policy is **"always
+bet the table minimum"** — the opposite of count-aware sizing. (3 runs, 2 seeds, all identical → solid.)
+
+**Convergence trace** (checkpoints; loss falls monotonically *as* the policy collapses to flat-1):
+
+```
+b2048_s0 (batch2048)  1250: 1 7 1 3 1 4 8   →  1875: 1 1 1 1 1 1 1 (holds)   loss 0.45→0.19
+b4096_s0 (batch4096)  1250: 1 1 1 3 8 6 6   →  3125: 1 1 1 1 1 1 1           loss 0.60→0.25
+b4096_s1 (batch4096)  2500: 2 1 1 1 2 4 8   →  4375: 1 1 1 1 1 1 1           loss 0.53→0.25
+```
+
+Three things the trace shows:
+- **Loss falls the whole time** (0.5–0.6 → 0.19–0.25) *while* the policy collapses to flat-1 — the net is
+  genuinely *converging*, and flat-1 is the policy it converges to.
+- **The ramp appears transiently** (e.g. `b4096_s0` @1250 `…+4:8 +6:6 +8:6`) — the net briefly "notices" the
+  rare high-count edge and bets high there, the *right idea* — but **can't hold it** (`+8` is consistently
+  the last to fall). It finds the ramp in flashes, then converges *away* from it to "bet the minimum."
+- **Smaller batch converged faster** (b2048 ~1875 vs b4096 ~4375) — noisier gradients reach the same flat-1
+  sooner; bigger batch is smoother but slower to the same endpoint.
+
+---
+
+## Test 8 — Stability levers @ γ=0 (the limit-cycle hypothesis)
+
+Tested the "boom-and-bust limit-cycle" fixes (REPORT_NOTES). **Two no-ops, one decisive-negative.**
+
+- **double-DQN & Polyak (`b2048_dbl`, `b2048_polyak`) — NO-OP at γ=0** (see ⚠ in *Open items*). Bit-identical
+  to baseline and to each other — they only touch the *bootstrap*, which γ=0 zeroes. Killed unfinished.
+- **Bigger buffer (`b2048_bigbuf`, 500k = 10×) — does NOT stabilise; rules out *forgetting*.** Wanders as
+  much as baseline. Decisive *within-run* evidence: 500k doesn't evict until ~session 500, so the first
+  ~500 sessions **cannot forget** — yet it wanders right through them. And loss falls monotonically while
+  the argmax flips → the net converges, the *decision* doesn't.
+
+**Conclusion:** at γ=0 the wandering is **not a limit cycle** (max-bias needs the bootstrap; forgetting
+ruled out) — it's **static argmax instability on a near-flat (thin-edge) Q-surface.** (Not dead globally —
+max-bias could bite at γ>0 — but not the γ=0 story.)
+
+---
+
+## Test 9 — Four-axis performance evals (the deliverable) [CENTRAL]
+
+The honest question: judged on *performance* (not the curve), is the learned bettor any good? Trained
+agents vs discrete-Kelly + Flat on full sessions (growth-rate ± CI · ruin · drawdown · bankroll), each in
+the regime it was **trained on** (in-distribution = fair; the other column = OOD cross-check, discounted).
+
+| agent (in-dist) | curve | growth/hand ×1e-4 — agent / kelly / flat | ruin % | verdict |
+|---|---|---|---|---|
+| growth `bigbuf` (1000 sess, γ0) | over-bet | −0.557 / −0.035 / −0.127 | 0.5 | **worse than Flat** (over-bets) |
+| ruin (1500 sess, γ0.95, **double-DQN**) | flat-4 | −6.39 [−7.2,−5.6] / −0.34 / −0.40 | **21** | **worse than Flat; ruins 21%** |
+| converged (b4096, 5000 sess, γ0) | flat-1 | −0.233 / −0.035 / −0.127 | 0.3 | **≈ Flat** (marginally worse) |
+
+- **Undertrained → over-bets → loses to Flat *and* ruins** (the expensive error; B2c's "over-betting
+  ruins"). The ruin-trained agent, *even with γ>0 + double-DQN*, learned **flat-4** — no restraint, **21%
+  ruin in-distribution**, CIs cleanly separated from Flat.
+- **Converged (5000 sess) → flat-1 ≈ the Flat baseline** (growth −0.233 vs Flat −0.127; ruin ~0) — it
+  *becomes* Flat, marginally worse (mild residual over-betting at off-probe bankrolls), and never beats it.
+
+**Headline result (CI-backed): RL does NOT rediscover Kelly here.** It either wanders (undertrained → over-
+bets → loses + ruins) or converges to **flat-minimum** (well-trained → becomes Flat) — never the count→size
+ramp. Analytic Kelly varies with count and beats Flat; end-to-end RL converges *to* Flat. For a signal this
+thin, the 20M-hand edge measurement is fundamentally more sample-efficient than value learning. (Lands on
+B2c's "the skill is restraint" — the agent *can't* learn it.)
+
+---
+
+## Test 10 — γ>0 (ruin regime): double-DQN, scale, and the Huber-delta mechanism [REVISES Tests 4, 9]
+
+Moved to the **ruin regime (200u, γ=0.95)** — where γ>0 is justified and the stabilizers (double-DQN,
+Polyak) are *live*, not γ=0 no-ops. Batch 512, n=1000–2000. **This arc revises the "scale is cosmetic"
+and "RL just converges to flat" conclusions.**
+
+**(a) double-DQN unlocks count-dependence at γ>0.** A/B, scale1:
+- double **OFF**: rigidly flat (`5 5 5 5 5 5 5`).
+- double **ON**: the count *separates* — transient *correct* ramps appear (`1 1 1 1 8 8 8`), then wander.
+The max-bias correction lets the count signal express (exactly the case double-DQN is for).
+
+**(b) Scale is NOT cosmetic — it's the bigger lever, via the Huber loss `delta=1.0`.** We use
+`F.smooth_l1_loss` (= Huber, delta=1). Reward magnitude vs delta sets the loss *regime*:
+- **scale1**: TD errors ≪ delta → **quadratic** (MSE-like) → noisy per-hand *outliers* dominate the
+  gradient → signal swamped → **flat**.
+- **scale50/100**: TD errors ≳ delta → **linear/clipped** (Huber-robust) → outliers capped → the
+  *consistent* count signal survives → the ramp *direction* forms (even with double **OFF**).
+So **scale slides errors across the Huber delta**; that reshape is non-uniform → Adam can't normalize it
+(Adam's ε is ruled out: ~5e-7, negligible at our gradients ~0.02). `reward_scale` and `delta` are two
+knobs for the same thing (×100 scale ≈ ÷100 delta). **This is why Test 4's batch-128 scale comparison was
+contaminated** — batch128 pinned everything flat, hiding scale's real effect (Arda's contamination point).
+
+**(c) The coverage diagnosis — what's learnable vs not.** Consistent across all γ>0 runs:
+- **Low/neutral counts (common, well-sampled) → lock to ~1 (correct, stable).** ✓ learnable.
+- **High counts (rare) → never stabilize (wander 1↔8).** ✗ coverage-limited — the betting analog of
+  Problem-A's rare-cell wall. lr-decay / batch / scale can't fix it (under-sampling, not optimization).
+So the **achievable target = consistent minimum-betting around break-even** (the common part); the
+high-count ramp *magnitude* is coverage-bound. (Flat-1, the γ=0 result, is actually the *coverage-robust*
+policy — bet minimum where you can't estimate the rare states.)
+
+**(d) Tuning toward the achievable (neutral) target:**
+- **scale50 > scale100** for neutral cleanliness (delta ≈ noise floor → less leakage/saturation; loss
+  *drops* to ~0.3 as well-sampled states resolve below delta, vs scale100 pinned ~1.0 in the linear region).
+- **double-DQN *hurts* neutral consistency** (adds noise) — it only helps the coverage-limited high end we
+  can't stabilize anyway, so for the neutral target prefer **OFF**.
+- **Lower *constant* lr** (1e-4): smaller Adam steps → less argmax-jitter → steadier neutral lock; better
+  than lr-*decay* (which freezes a random snapshot). *[2×2×2 running: batch{256,512} × double{on,off} ×
+  lr{1e-4,1e-5}, scale50.]*
 
 ---
 
@@ -217,31 +331,52 @@ artifacts); each run id carries its own provenance (timestamp + git hash).
    clean **and stable**.
 2. **γ governs stability, not the ramp** — γ=1 diverges (telescoping variance); γ<1 stable but still flat.
    Use γ=0 for growth (Kelly is a myopic optimum); intermediate γ reserved for the ruin regime.
-3. **Batch (gradient-SNR) breaks the flatline — but only intermittently.** Bigger batch averages the
-   per-hand noise so the count signal surfaces; ≤1024 stays flat, ≥2048 makes the ramp *appear* — but it
-   **wanders** (flat↔ramp) rather than converging. A *stable* ramp is **not yet achieved** (Tests 4, 6).
-4. **The wall is gradient-SNR; stability is the crux.** The agent is re-estimating the same edge-by-count
-   curve that took **20M hands** to measure analytically, through a noisier channel (log-reward of random
-   bets) — the betting analog of Problem-A's rare-cell coverage. Whether more batch+data (Test 7) or
-   lr-decay stabilises it is **open**.
-5. **Interpretation [HYPOTHESIS]:** the wandering may be the *thin edge showing through.* B2c found Kelly
-   barely beats flat (full-Kelly net-negative @400u), so the Q-surface is near-flat across bet sizes — and
-   an argmax over a near-flat, noisy surface is *inherently* unstable. The difficulty of *learning* the
-   bet would then = the thin-edge *economics*. (Hypothesis — could be optimization, not economics.)
-6. **Meta-narrative:** the structured/analytic Kelly (sized from measured edges) is far more
-   sample-efficient than end-to-end RL here — the signal is too weak for function approximation to extract
-   cheaply. Mirrors the Problem-A "does the less-structured thing match the principled one?" arc.
-7. **Speed:** ~2.5–2.7 sess/s; threads don't help; parallelism = independent runs across cores.
+3. **Batch (gradient-SNR) breaks the flatline, but doesn't reach Kelly.** ≤1024 stays flat; ≥2048 makes a
+   ramp *appear* — but it **wanders**, and with enough data **converges to flat-minimum** (Test 7), never
+   the count ramp.
+4. **At γ=0: RL converges to flat-minimum, not Kelly (Test 9, CI-backed).** Undertrained agents over-bet
+   → lose to Flat *and* ruin; well-trained agents → flat-1 ≈ Flat. **But this is the γ=0 story — at γ>0
+   with proper reward scale, count-dependence *does* form (Test 10, #8–10).** So the headline is regime-
+   dependent, not "RL can't ever learn it."
+5. **Why — the thin-edge / SNR wall.** At γ=0, betting >1 only pays at the *rare* high counts and is −EV at
+   the common low counts, so the loss-minimising policy is "bet the minimum." The count→size signal (~1e-4)
+   is too thin and high counts too rare for value learning to resolve — the agent re-estimates the same edge
+   curve that took **20M hands** to measure, through a noisier channel (betting-side analog of Problem-A's
+   rare-cell coverage). The wandering is **static argmax instability on a near-flat surface** — *not* a
+   limit cycle (Test 8 ruled out forgetting + showed double/Polyak are γ=0 no-ops).
+6. **Meta-narrative (the report headline):** structured/analytic Kelly is **decisively more
+   sample-efficient** than end-to-end RL here — RL converges *to* Flat; Kelly *beats* Flat. Lands on B2c's
+   "the skill is restraint" (the agent can't learn it). Mirrors the Problem-A "less-structured vs
+   principled" arc — with a *negative, principled* answer this time.
+7. **Speed:** ~2.5–2.7 sess/s (γ=0, batch128); big batch / double-DQN / γ>0 are slower; threads don't help.
+8. **[REVISES #5] Scale is NOT cosmetic — it's the Huber-delta regime (Test 10).** We use Huber loss
+   (`smooth_l1`, delta=1); reward scale slides TD errors across delta. Too small (scale1) → quadratic →
+   per-hand *outliers* swamp the signal → flat; large enough (scale50/100) → clipped/robust → the consistent
+   signal survives → the count separates. Adam's ε ruled out (negligible at our gradients). The earlier
+   "cosmetic" read was a **batch-128 contamination** artifact. Equivalent knob: lower the Huber **delta**.
+9. **At γ>0, count-dependence FORMS (double-DQN and/or scale unlock it) — but doesn't fully stabilise.**
+   The ramp *direction* appears (lows lock to ~1, highs elevate); the high-count *magnitude* still wanders.
+10. **The wall is high-count COVERAGE; the achievable target is neutral consistency.** Low/neutral counts
+    (common) lock reliably; high counts (rare) can't stabilise (under-sampling — the betting analog of
+    Problem-A's rare cells). Honest deliverable = "reliable minimum-betting around break-even + a
+    coverage-bound high end"; the fix for the high end is **oversampling / prioritised replay**, not scale
+    /lr/batch. **scale50 + double-OFF + lower constant lr** is the current best cell for the neutral target.
 
-**Open question driving Test 7 / next:** does `batch 4096 + 5000 sessions` (running) *converge* the ramp,
-or does stability need **lr-decay** (settle the late argmax) — or is the wandering *fundamental* (finding
-#5)? The deliverable pipeline (`train_bet_agent.py` → `save_bet_run` → `load_bet_agent` →
-`eval_bet_agent.py` four-axis) is **built + validated**, ready the moment a stable agent lands.
+**Status:** the headline result is **in hand and CI-backed**, and the deliverable pipeline
+(`train_bet_agent.py` → `save_bet_run` → `load_bet_agent` → `eval_bet_agent.py`) is built + validated and
+*produced* it. **Next:** frame for the report (the "RL converges to Flat, not Kelly" story); optional polish
+(lr-decay, a clean ruin-γ sweep, more eval seeds for tighter CIs) only to harden specific numbers.
 
 ---
 
 ## Open items & decisions
 
+- **⚠ WARNING (2026-06-30) — stabilisation levers are γ-DEPENDENT; double-DQN & Polyak are NO-OPS at
+  γ=0.** They only touch the *bootstrap* term (`γ·max Q(s')`), which γ=0 zeroes — so a γ=0 double-DQN or
+  Polyak/`target_tau` run is a **silent re-run of the hard-sync baseline** (caught via *bit-identical*
+  output across `b2048_dbl` / `b2048_polyak`, killed unfinished). At γ=0 the only stability levers are
+  **buffer size** (forgetting) and **lr / lr-decay**; double-DQN & Polyak only bite at **γ>0** (e.g. the
+  ruin regime). Don't test them against a γ=0 run.
 - **(2026-06-29) `BetTrainConfig` default `gamma` → 0.0** (was 1.0). γ=1 diverges on the bettor
   (telescoping 1000-hand return); γ=0 is the growth-regime optimum (Kelly is the myopic per-hand
   log-optimum). Adjustable per-run.

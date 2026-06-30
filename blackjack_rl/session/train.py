@@ -80,6 +80,7 @@ class BetTrainConfig:
     target_tau: float = 0.0
     double_dqn: bool = False
     ruin_penalty: float = -1.0
+    reward_scale: float = 1.0
     bankroll_scale: float = GROWTH_BANKROLL
     seed: int = 0
     torch_threads: int = 1
@@ -151,6 +152,7 @@ def train_bet(
         cap = env.run(play, agent)  # <- single session-generation seam (current eps-greedy net)
         for transition in session_to_transitions(
             cap, encode=agent.encode_state, n_levels=len(agent.levels), ruin_reward=config.ruin_penalty,
+            reward_scale=config.reward_scale,
         ):
             buffer.push(transition)
             env_steps += 1

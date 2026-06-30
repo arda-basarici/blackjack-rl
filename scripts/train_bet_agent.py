@@ -44,6 +44,13 @@ def main() -> None:
     ap.add_argument("--sessions", type=int, default=5000)
     ap.add_argument("--batch", type=int, default=4096)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--gamma", type=float, default=0.0)
+    ap.add_argument("--double", action="store_true")
+    ap.add_argument("--tau", type=float, default=0.0)
+    ap.add_argument("--buffer", type=int, default=50_000)
+    ap.add_argument("--scale", type=float, default=1.0)
+    ap.add_argument("--lr", type=float, default=1e-3)
+    ap.add_argument("--lr-decay", action="store_true")  # linear lr -> 1e-5 over the run (else constant)
     args = ap.parse_args()
 
     config = BetTrainConfig(
@@ -51,11 +58,18 @@ def main() -> None:
         n_sessions=args.sessions,
         batch_size=args.batch,
         seed=args.seed,
+        gamma=args.gamma,
+        double_dqn=args.double,
+        target_tau=args.tau,
+        buffer_capacity=args.buffer,
+        reward_scale=args.scale,
+        lr=args.lr,
+        lr_schedule="linear" if args.lr_decay else "constant",
     )
     tag = f"{args.regime}/b{args.batch}/s{args.seed}"
     _log(
         f"train_bet_agent START {tag}  sessions={args.sessions} gamma={config.gamma} "
-        f"batch={config.batch_size} eps={config.epsilon} lr={config.lr}"
+        f"batch={config.batch_size} double={config.double_dqn} tau={config.target_tau} buffer={config.buffer_capacity}"
     )
 
     learning_curve: list[dict] = []

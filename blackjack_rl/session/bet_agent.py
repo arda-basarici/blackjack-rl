@@ -218,6 +218,7 @@ def session_to_transitions(
     encode: Callable[[float, float, float], list[float]],
     n_levels: int,
     ruin_reward: float = -1.0,
+    reward_scale: float = 1.0,
 ) -> list[Transition]:
     """Reconstruct the bettor's TD transitions from a played session — the bet-side analog of
     ``dqn.deep_q.hand_to_transitions``.
@@ -245,7 +246,7 @@ def session_to_transitions(
         state = torch.tensor(
             encode(rec.true_count, rec.decks_remaining, rec.bankroll_before), dtype=torch.float32
         )
-        reward = rec.log_reward if isfinite(rec.log_reward) else ruin_reward
+        reward = (rec.log_reward if isfinite(rec.log_reward) else ruin_reward) * reward_scale
         if rec.done:  # terminal hand: no bootstrap (placeholder next-state)
             transitions.append(Transition(
                 state=state, action=rec.bet_level, reward=reward,
