@@ -13,7 +13,7 @@ The D17 baseline ladder, bottom to top — each a ``BetPolicy`` (env.py), measur
 from __future__ import annotations
 
 import random
-from math import isfinite
+from math import isfinite, log
 from typing import Callable, Sequence
 
 import torch
@@ -23,7 +23,20 @@ from blackjack_rl.dqn.replay import Transition
 from blackjack_rl.session.env import BET_SPREAD, GROWTH_BANKROLL, SessionCapture
 
 TC_SCALE = 10.0  # true-count normalizer: counts rarely exceed ~10 in magnitude -> input ~O(1)
-FEATURE_DIM = 3  # (true_count, remaining_fraction, bankroll) — the bet model's state width
+FEATURE_DIM = 3  # (true_count, remaining_fraction, bankroll) — the default (raw-bankroll) state width
+
+# how the bankroll enters the bet encoder — the encoding-ablation seam (mirrors dqn.agent's `encoding`):
+#   "raw"      : bankroll / scale — absolute wealth on a fixed reference (the default; D14)
+#   "logratio" : log(bankroll / scale) — log-wealth vs the reference (Kelly's natural scale; W*f* additive)
+#   "none"     : bankroll dropped — the net sizes bets on count + depth only (the wealth-vs-edge test)
+BANKROLL_FEATURES: tuple[str, ...] = ("raw", "logratio", "none")
+
+
+def bet_feature_dim(bankroll_feature: str = "raw") -> int:
+    """Input width for the bet encoder — 2 (count, depth) when bankroll is dropped, else 3."""
+    if bankroll_feature not in BANKROLL_FEATURES:
+        raise ValueError(f"unknown bankroll_feature {bankroll_feature!r}; expected one of {BANKROLL_FEATURES}")
+    return 2 if bankroll_feature == "none" else 3
 
 
 class FlatBet:
@@ -103,23 +116,30 @@ def encode_bet_state(
     *,
     num_decks: float = 6.0,
     bankroll_scale: float = GROWTH_BANKROLL,
+    bankroll_feature: str = "raw",
 ) -> list[float]:
     """The bet model's state features — the single, isolated encoder (the seam a future learned-count
-    agent swaps, CONCEPTS/DESIGN). Three normalized scalars:
+    agent swaps, CONCEPTS/DESIGN). Always ``true_count / TC_SCALE`` (the edge signal — the count already
+    folds in decks-remaining) and ``decks_remaining / num_decks`` (the **remaining-shoe fraction** in
+    (0, 1]: scale-free, shoe-size-invariant). ``bankroll_feature`` selects the third — the **encoding
+    ablation** for the wealth-vs-edge question (see :data:`BANKROLL_FEATURES`):
 
-    - ``true_count / TC_SCALE`` — the edge signal (the count already folds in decks-remaining);
-    - ``decks_remaining / num_decks`` — the **remaining-shoe fraction** in (0, 1]: scale-free,
-      shoe-size-invariant (the env passes ``decks_remaining = cards_remaining / 52`` in decks-units);
-    - ``bankroll / bankroll_scale`` — bankroll on an **absolute** scale via a FIXED reference, NOT
-      per-session ``W0``: the optimal discrete level depends on ``f*·W`` vs the absolute unit levels, so
-      the agent must see absolute bankroll — this is what lets a bankroll-generalizing agent (the parked
-      sweep extension) reuse this encoder unchanged (DESIGN D14).
+    - ``"raw"`` — ``bankroll / bankroll_scale``: bankroll on an **absolute** scale via a FIXED reference
+      (DESIGN D14 — lets a bankroll-generalizing agent reuse the encoder). The wealth-scaling this can
+      induce (bet ∝ wealth, ignoring edge) is what the ablation probes.
+    - ``"logratio"`` — ``log(bankroll / bankroll_scale)``: log-wealth vs the reference — Kelly's natural
+      scale (``log(bet) = log(W) + log(f*(count))`` is additive), symmetric around the reference.
+    - ``"none"`` — bankroll dropped: the net sizes bets on **count + depth only** (the decisive test —
+      does edge-gating emerge / sharpen once the net cannot key on wealth?).
     """
-    return [
-        true_count / TC_SCALE,
-        decks_remaining / num_decks,
-        bankroll / bankroll_scale,
-    ]
+    feats = [true_count / TC_SCALE, decks_remaining / num_decks]
+    if bankroll_feature == "raw":
+        feats.append(bankroll / bankroll_scale)
+    elif bankroll_feature == "logratio":
+        feats.append(log(max(bankroll, 1e-9) / bankroll_scale))  # floor guards log(0) at a wiped bankroll
+    elif bankroll_feature != "none":
+        raise ValueError(f"unknown bankroll_feature {bankroll_feature!r}; expected one of {BANKROLL_FEATURES}")
+    return feats
 
 
 class BetAgent:
@@ -151,6 +171,7 @@ class BetAgent:
         epsilon: float = 0.1,
         num_decks: float = 6.0,
         bankroll_scale: float = GROWTH_BANKROLL,
+        bankroll_feature: str = "raw",
     ) -> None:
         if not levels:
             raise ValueError("levels must have at least one entry")
@@ -158,15 +179,18 @@ class BetAgent:
         self.epsilon = epsilon
         self.num_decks = num_decks
         self.bankroll_scale = bankroll_scale
+        self.bankroll_feature = bankroll_feature  # the encoding-ablation seam (self-describing for persistence)
         self.hidden: tuple[int, ...] = tuple(int(h) for h in hidden)  # self-describing for persistence
-        self.q_net = QNetwork(FEATURE_DIM, len(self.levels), self.hidden)
+        self.q_net = QNetwork(bet_feature_dim(bankroll_feature), len(self.levels), self.hidden)
 
     def encode_state(self, true_count: float, decks_remaining: float, bankroll: float) -> list[float]:
         """This agent's state vector — :func:`encode_bet_state` bound to its ``num_decks`` /
-        ``bankroll_scale``. The trainer passes this as the ``encode`` for :func:`session_to_transitions`."""
+        ``bankroll_scale`` / ``bankroll_feature``. The trainer passes this as the ``encode`` for
+        :func:`session_to_transitions`."""
         return encode_bet_state(
             true_count, decks_remaining, bankroll,
             num_decks=self.num_decks, bankroll_scale=self.bankroll_scale,
+            bankroll_feature=self.bankroll_feature,
         )
 
     def q_values(self, *, true_count: float, decks_remaining: float, bankroll: float) -> torch.Tensor:

@@ -33,6 +33,7 @@ def construction_of(agent: BetAgent) -> dict[str, Any]:
         "hidden": list(agent.hidden),
         "num_decks": agent.num_decks,
         "bankroll_scale": agent.bankroll_scale,
+        "bankroll_feature": agent.bankroll_feature,
     }
 
 
@@ -72,6 +73,7 @@ def _rebuild_and_load(record: dict[str, Any], weights: Path) -> BetAgent:
         epsilon=0.0,
         num_decks=c["num_decks"],
         bankroll_scale=c["bankroll_scale"],
+        bankroll_feature=c.get("bankroll_feature", "raw"),  # default: pre-ablation runs are raw-bankroll
     )
     agent.q_net.load_state_dict(torch.load(weights, map_location="cpu"))
     agent.q_net.eval()

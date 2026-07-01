@@ -31,6 +31,10 @@ lever fixes it*.
 | 8 | Stability levers @γ=0 (double/Polyak/buffer) | exploratory | double/Polyak **no-op at γ=0**; buffer rules out *forgetting* |
 | 9 | **Four-axis performance evals (deliverable)** | **central** | learned bettor **loses to / becomes Flat, never Kelly** (CI-backed) — *at γ=0* |
 | 10 | **γ>0: double-DQN, scale, Huber-delta** | exploratory | **revises 4 & 9** — scale NOT cosmetic (Huber); count-dep *forms* at γ>0; high end = coverage |
+| 11 | Harmonic (orbit-collapse) + "RL visits Kelly" | exploratory | harmonic collapses orbit (§33); lows lock, high end *visits* ramps but wanders |
+| 12 | Longer sweep (2.5× data, double×regime×batch) | exploratory | more data → flat-1; tails visit ramps, don't hold; ⚠ double no-op at γ=0 |
+| 13 | **H3 + multi-seed hardening (deliverable)** | **central** | ramps **far worse than flat** (dd 14–18%); RL≈flat CI-backed; **double-ON safety was seed-luck**; γ0.9 too low |
+| 14 | **Encoding ablation (wealth vs thin edge)** | **central** | drop/re-encode bankroll → **encoding-invariant, all ≈ flat** → the wall is FUNDAMENTAL (thin edge), not representational |
 | — | Prior committed baselines (B1–B2c) | committed | reference index |
 
 ---
@@ -396,6 +400,82 @@ best-vs-final — else it's selection bias.*
 
 ---
 
+## Test 12 — Longer sweep: more data doesn't break the flat attractor
+
+2×2×2 (double{on,off} × regime{growth γ0, ruin γ0.95} × batch{512@5k, 2048@2k}) + rampiest (scale100),
+base scale50 + harmonic + ε-decay, `--checkpoints`. **More data (2.5×) → flat-1 attractor; the ramp does
+NOT stabilize.** Reading the *tails* (not just the final): **lows LOCK** (`1 1 1 1`), the **high end
+perpetually WANDERS** through near-Kelly ramps and flat — e.g. `dbloff_r_b2048` @1500 = `1 1 1 1 6 8 8`
+(dist-2 from Kelly), then back to flat by 2000. Harmonic shrinks the orbit but the *tied* high-count argmax
+still flips even at low lr. So "more data → flat-1" was a **final-checkpoint artifact** — the ramp forms
+*repeatedly*, never holds (the H-series, confirmed at 5000 sessions).
+⚠ **Design slip:** double-DQN is a **no-op at γ=0**, so the growth double on/off cells came out bit-identical
+(2 wasted runs — the warning was already in Test 8, and I repeated it).
+
+## Test 13 — H3 (are the ramps real?) + multi-seed hardening [CENTRAL, deliverable]
+
+**H3 — the visited ramps are NOT better policies.** Best-checkpoint four-axis evals (each run's
+closest-to-Kelly checkpoint, incl. the dist-2 `1 1 1 1 6 8 8`) are *dominated by flat*: worse growth, FAR
+higher drawdown. Overnight **multi-seed** hardening (native regime cell, mean ± std across seeds):
+
+| config [phase] | n | growth ×1e4 | ruin % | dd % |
+|---|---|---|---|---|
+| ruin γ0.95 dbl-OFF [final] | 6 | −0.48 ± 0.04 | 0.03 | 1.39 ± 0.44 |
+| ruin γ0.95 dbl-ON [final] | 6 | −0.52 ± 0.11 | 0.07 | **2.60 ± 3.05** |
+| ruin γ0.9 dbl-OFF [final] | 3 | −0.79 ± 0.56 | 2.47 | 9.83 ± 14.3 |
+| ruin γ0.99 dbl-OFF [final] | 3 | −0.52 ± 0.06 | 0.00 | 1.30 ± 0.44 |
+| growth γ0 [final] | 6 | −0.19 ± 0.08 | 0.00 | 0.18 ± 0.29 |
+| ruin γ0.95 dbl-OFF [best-ckpt] | 8 | −1.08 ± 0.88 | 2.09 | **13.9 ± 12.7** |
+| ruin γ0.95 dbl-ON [best-ckpt] | 9 | −1.48 ± 1.21 | 4.94 | **18.3 ± 12.2** |
+| *ruin flat / kelly* | | −0.42 / **−0.31** | 0 | 0.55 / 2.25 |
+| *growth flat / kelly* | | −0.14 / **+0.04** | 0 | 0 |
+
+**Hardened findings:**
+1. **RL ≈ flat — tight across seeds** (finals just below flat, never Kelly; low std). The thesis holds *with
+   error bars*.
+2. **Best ramps robustly FAR worse than flat** (dd 14–18% vs 0.55%) — H3 decisive: the ramps are
+   **over-betting artifacts** (Kelly-shaped in the 1-D probe, wealth-scaling in the full policy), NOT a
+   better policy the objective failed to reward.
+3. **⚠ REVISES Test 10/11 "double-ON is safe" — that was single-seed luck.** Multi-seed double-ON [final]
+   dd = 2.60 ± **3.05**% (high variance, *some seeds over-bet*); **double-OFF is the consistent one**
+   (1.39 ± 0.44%). Judge double by the eval across seeds, not one run's curve.
+4. **γ characterized (the open item):** γ0.95/0.99 stable + safe (dd ~1.3%, low variance); **γ0.9 too low**
+   — riskier, high-variance over-betting (dd 9.8 ± 14%). γ0.95 was a sound default; don't go below it.
+5. **Structured Kelly is the only policy beating flat** (ruin −0.31, growth +0.04). The learned bettor
+   never gets there.
+
+*Eval infra (this session):* baseline **caching** (Kelly/Flat once) + `--regime` + `run_dir@session`
+checkpoint loading + **structured result-saving** (`runs/<id>/eval_*.json`, provenance) — `eval_bet_agent.py`
+/ `eval_best_checkpoints.py`. Fast eval = n2000 + cache ≈ 1 min/agent. Aggregation:
+`scratchpad/aggregate_seeds.py`.
+
+## Test 14 — Encoding ablation: wealth or thin edge? FALSIFIES the wealth hypothesis [CENTRAL]
+
+The embedding (Test-11-era) suggested RL keyed on **wealth, not edge** (H-representational). Tested it
+directly with a configurable bet encoder (`--bankroll-feature`, mirroring dqn's `encoding`/`with_splits`):
+**raw** (bankroll/scale — current, D14), **logratio** (`log(W/ref)` — Kelly's natural scale), **none**
+(bankroll **DROPPED** → count+depth only). Growth γ0, matched seeds 0–5, else identical to Test 13.
+
+**Result — encoding-invariant, all ≈ flat (growth cell, mean ± std, ×1e4):**
+
+| encoding | n | growth | dd % |
+|---|---|---|---|
+| raw | 6 | −0.19 ± 0.08 | 0.18 |
+| logratio | 6 | −0.28 ± 0.16 | 0.13 |
+| **none** (drop bankroll) | 6 | **−0.19 ± 0.04** | 0.37 |
+| *flat / kelly* | | −0.14 / **+0.04** | 0 |
+
+**`none` == `raw` exactly** — dropping wealth entirely changes nothing → **the wall is FUNDAMENTAL (thin
+edge / coverage), NOT representational.** Native bet-vs-count across arms: no arm gates consistently (mostly
+flat / weak; seed-5 gates in all three; `none`/`logratio` add *spurious negative-count* over-betting).
+
+**Two overclaims corrected here (the honesty story):** (a) the embedding's "wealth organization" was an
+**OOD-probe artifact** — it swept bankrolls 50–600u while the agent lived at 400u; at **native** bankroll
+the agents are mostly **flat**, not wealth-scaling; (b) "learned half of Kelly" overstated — native is
+mostly flat + occasional *coarse* gating (seed-dependent). **The arc:** RL≈flat → hypothesise wealth
+(embedding) → **build the ablation, falsify it** → the thin-edge wall. Encoder seam:
+`bet_agent.bankroll_feature` (`raw|logratio|none`) + `bet_feature_dim`.
+
 ## Prior committed baselines (B1–B2c) — reference index
 
 These are **committed, measured** experiments (not re-run here) that set the analytic ladder the learned
@@ -447,11 +527,24 @@ artifacts); each run id carries its own provenance (timestamp + git hash).
     Problem-A's rare cells). Honest deliverable = "reliable minimum-betting around break-even + a
     coverage-bound high end"; the fix for the high end is **oversampling / prioritised replay**, not scale
     /lr/batch. **scale50 + double-OFF + lower constant lr** is the current best cell for the neutral target.
+11. **Harmonic lr collapses the orbit (§33, Robbins–Monro); loss = settledness, not correctness (Test 11).**
+    Constant lr *orbits* the optimum forever (the wandering); harmonic `1/t` *collapses* it — lows lock
+    rock-solid, but the high end still flips (coverage: the argmax is tied, so even tiny late-lr flips it).
+12. **CONFIRMED across seeds — RL ≈ flat, and the visited ramps are FAR worse than flat (Test 13, H3).**
+    The near-Kelly ramps the orbit visits are **over-betting artifacts** (dd 14–18% vs flat 0.55%, worse
+    growth) — *not* a better policy the objective fails to reward. H3 answered: noise excursions. Only
+    structured Kelly beats flat. (Mechanism: **wealth-scaling without edge-gating** — the net keyed on
+    bankroll, not count; the PCA/t-SNE embedding shows clusters split by bankroll — REPORT_NOTES_B.)
+13. **[REVISES the single-seed double reads] Multi-seed hardening (Test 13).** "double-ON is safe" was
+    seed-luck — across seeds double-ON [final] dd = 2.60 ± 3.05% (variable, some over-bet) vs double-OFF
+    1.39 ± 0.44% (consistent). γ characterized: γ0.95/0.99 stable+safe, γ0.9 too low. **The whole thesis
+    now holds with CIs.**
 
-**Status:** the headline result is **in hand and CI-backed**, and the deliverable pipeline
-(`train_bet_agent.py` → `save_bet_run` → `load_bet_agent` → `eval_bet_agent.py`) is built + validated and
-*produced* it. **Next:** frame for the report (the "RL converges to Flat, not Kelly" story); optional polish
-(lr-decay, a clean ruin-γ sweep, more eval seeds for tighter CIs) only to harden specific numbers.
+**Status:** the headline is **CI-backed AND multi-seed hardened** (Test 13) — RL ≈ flat, the visited ramps
+are far worse than flat, structured Kelly is the only winner; one single-seed claim (double-ON safety)
+honestly revised; ruin-γ characterized. **The core investigation is complete.** **Next:** the *representational*
+lever — the wealth-vs-edge diagnosis (embedding) → the `W_current/W_start` encoding experiment (a **design**
+call, not a rescale — see REPORT_NOTES_B "wealth-scaling without edge-gating"), then report framing.
 
 ---
 

@@ -17,6 +17,7 @@ from blackjack_rl.session.bet_agent import (
     BetAgent,
     FlatBet,
     KellyBet,
+    bet_feature_dim,
     encode_bet_state,
     session_to_transitions,
 )
@@ -142,6 +143,38 @@ def test_encode_bet_state_shape_and_normalization():
     # remaining fraction is decks_remaining / num_decks in (0, 1]; bankroll on the fixed absolute scale
     half = encode_bet_state(-5.0, 3.0, 200.0, num_decks=6.0, bankroll_scale=400.0)
     assert half == pytest.approx([-0.5, 0.5, 0.5])
+
+
+# --- BetAgent (B2d): the bankroll-feature encoding ablation ---------------------------
+
+def test_bet_feature_dim_follows_the_flag():
+    assert bet_feature_dim("raw") == 3
+    assert bet_feature_dim("logratio") == 3
+    assert bet_feature_dim("none") == 2  # bankroll dropped -> count + depth only
+    with pytest.raises(ValueError, match="unknown bankroll_feature"):
+        bet_feature_dim("bogus")
+
+
+def test_encode_bet_state_bankroll_feature_variants():
+    import math
+
+    kw = dict(num_decks=6.0, bankroll_scale=400.0)
+    raw = encode_bet_state(0.0, 3.0, 200.0, bankroll_feature="raw", **kw)
+    assert raw == pytest.approx([0.0, 0.5, 0.5])                       # bankroll/scale = 200/400
+    logr = encode_bet_state(0.0, 3.0, 200.0, bankroll_feature="logratio", **kw)
+    assert logr == pytest.approx([0.0, 0.5, math.log(0.5)])            # log(200/400)
+    dropped = encode_bet_state(0.0, 3.0, 200.0, bankroll_feature="none", **kw)
+    assert dropped == pytest.approx([0.0, 0.5])                        # bankroll gone -> 2 features
+    with pytest.raises(ValueError, match="unknown bankroll_feature"):
+        encode_bet_state(0.0, 3.0, 200.0, bankroll_feature="bogus", **kw)
+
+
+def test_bet_agent_none_feature_has_two_input_net():
+    """A dropped-bankroll agent's net takes 2 inputs, and encode_state returns 2 features — still runs."""
+    agent = BetAgent(levels=(1, 2, 3), bankroll_feature="none")
+    assert agent.q_net.net[0].in_features == 2
+    assert len(agent.encode_state(2.0, 3.0, 400.0)) == 2
+    assert agent.q_values(true_count=2.0, decks_remaining=3.0, bankroll=400.0).shape == (3,)
 
 
 # --- BetAgent (B2d): action selection ------------------------------------------------

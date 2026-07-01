@@ -57,6 +57,7 @@ def main() -> None:
     ap.add_argument("--eps-decay", action="store_true")  # linear ε eps-start -> 0 over the run
     ap.add_argument("--eps-start", type=float, default=0.5)  # start ε for the decay (explore early)
     ap.add_argument("--checkpoints", action="store_true")  # persist q-net weights at every probe checkpoint
+    ap.add_argument("--bankroll-feature", choices=("raw", "logratio", "none"), default="raw")  # encoder ablation
     args = ap.parse_args()
 
     config = BetTrainConfig(
@@ -73,6 +74,7 @@ def main() -> None:
         lr_schedule=("harmonic" if args.lr_harmonic else "linear" if args.lr_decay else "constant"),
         epsilon_schedule="linear" if args.eps_decay else "constant",
         epsilon_start=args.eps_start,  # ε-decay goes eps_start -> 0 (explore early, exploit late)
+        bankroll_feature=args.bankroll_feature,
     )
     tag = f"{args.regime}/b{args.batch}/s{args.seed}"
     _log(

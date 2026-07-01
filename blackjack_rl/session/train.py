@@ -82,6 +82,7 @@ class BetTrainConfig:
     ruin_penalty: float = -1.0
     reward_scale: float = 1.0
     bankroll_scale: float = GROWTH_BANKROLL
+    bankroll_feature: str = "raw"  # bet-encoder ablation: "raw" | "logratio" | "none" (drop bankroll)
     seed: int = 0
     torch_threads: int = 1
 
@@ -127,6 +128,7 @@ def train_bet(
         epsilon=config.epsilon,
         num_decks=env.sim_config.num_decks,
         bankroll_scale=config.bankroll_scale,
+        bankroll_feature=config.bankroll_feature,
     )
     target = make_target(agent.q_net)
     optimizer = torch.optim.Adam(agent.q_net.parameters(), lr=config.lr)

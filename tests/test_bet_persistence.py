@@ -42,6 +42,21 @@ def test_save_then_load_reproduces_policy(tmp_path):
         assert agent.bet(**s) == loaded.bet(**s)
 
 
+def test_save_load_preserves_bankroll_feature(tmp_path):
+    """A non-raw encoder (dropped bankroll) round-trips — construction restores the 2-feature net."""
+    torch.manual_seed(0)
+    agent = BetAgent(levels=(1, 2, 4, 8), hidden=(32, 16), num_decks=6.0, bankroll_scale=400.0,
+                     bankroll_feature="none")
+    cfg = BetTrainConfig(session=growth_config(), n_sessions=5, bankroll_feature="none")
+    run_dir = save_bet_run(tmp_path, agent, cfg, metrics={}, run_id="feat")
+
+    loaded = load_bet_agent(run_dir)
+    assert loaded.bankroll_feature == "none"
+    assert loaded.q_net.net[0].in_features == 2  # bankroll dropped -> count + depth
+    for s in _STATES:
+        assert agent.bet(**s) == loaded.bet(**s)  # identical policy (bankroll ignored by the encoder)
+
+
 def test_record_carries_provenance_and_metrics(tmp_path):
     import json
 
