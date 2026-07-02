@@ -58,7 +58,10 @@ def main() -> None:
     ap.add_argument("--eps-start", type=float, default=0.5)  # start ε for the decay (explore early)
     ap.add_argument("--checkpoints", action="store_true")  # persist q-net weights at every probe checkpoint
     ap.add_argument("--bankroll-feature", choices=("raw", "logratio", "none"), default="raw")  # encoder ablation
+    ap.add_argument("--bankroll-starts", type=str, default=None,  # bankroll-coverage sweep (D14): cycle the
+                    help="comma-separated session-start bankrolls to cycle, e.g. 100,200,300,400,500,600")
     args = ap.parse_args()
+    starts = tuple(float(x) for x in args.bankroll_starts.split(",")) if args.bankroll_starts else None
 
     config = BetTrainConfig(
         session=REGIMES[args.regime](),
@@ -75,8 +78,9 @@ def main() -> None:
         epsilon_schedule="linear" if args.eps_decay else "constant",
         epsilon_start=args.eps_start,  # ε-decay goes eps_start -> 0 (explore early, exploit late)
         bankroll_feature=args.bankroll_feature,
+        bankroll_starts=starts,  # bankroll-coverage sweep: cycle the session start over these
     )
-    tag = f"{args.regime}/b{args.batch}/s{args.seed}"
+    tag = f"{args.regime}{'/cover' if starts else ''}/b{args.batch}/s{args.seed}"
     _log(
         f"train_bet_agent START {tag}  sessions={args.sessions} gamma={config.gamma} "
         f"batch={config.batch_size} double={config.double_dqn} tau={config.target_tau} buffer={config.buffer_capacity}"
@@ -108,7 +112,8 @@ def main() -> None:
         "learning_curve": learning_curve,
         "checkpoint_sessions": [s for s, _ in checkpoints],
     }
-    run_id = f"{start:%Y%m%d-%H%M%S}_bet-agent_{args.regime}_b{args.batch}_{args.sessions}sess"
+    cover = "_cover" if starts else ""
+    run_id = f"{start:%Y%m%d-%H%M%S}_bet-agent_{args.regime}{cover}_b{args.batch}_{args.sessions}sess"
     run_dir = save_bet_run(RUNS_DIR, agent, config, metrics, run_id=run_id)
     if checkpoints:  # the trajectory weights, beside the final model.pt (load via load_bet_checkpoint)
         ckpt_dir = run_dir / "checkpoints"

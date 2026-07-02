@@ -326,8 +326,15 @@ def _bet_at(checkpoint: dict, count: int) -> float:
     return float(bets.get(str(count), bets.get(count)))
 
 
-def load_bet_runs(runs_dir: str | Path | None = None) -> pd.DataFrame:
-    """Every ``kind=='bet_agent'`` run as one tidy frame (config + trajectory length)."""
+def load_bet_runs(runs_dir: str | Path | None = None, include_cover: bool = False) -> pd.DataFrame:
+    """Every ``kind=='bet_agent'`` run as one tidy frame (config + trajectory length).
+
+    By default EXCLUDES the bankroll-coverage sweep runs (D14 — trained with the session start cycled over
+    a range, tagged ``_cover_`` in the run id). They share the (regime, gamma, feature) signature of the
+    standard fixed-start agents, so pooling them would silently hijack every latest-per-seed selection
+    (probe_run, replication, encoding ablation, multiseed summary). Standard analyses see only the
+    fixed-start agents; pass ``include_cover=True`` and filter on the ``cover`` column for the coverage
+    comparison (Ch4 §4.4)."""
     runs_dir = Path(runs_dir) if runs_dir else ROOT / "runs"
     rows = []
     for f in sorted(glob.glob(str(runs_dir / "*" / "record.json")), key=os.path.getmtime):
@@ -337,11 +344,15 @@ def load_bet_runs(runs_dir: str | Path | None = None) -> pd.DataFrame:
             continue
         if r.get("kind") != "bet_agent":
             continue
+        is_cover = "_cover_" in Path(f).parent.name
+        if is_cover and not include_cover:
+            continue
         c = r.get("config", {}) or {}
         m = r.get("metrics", {}) or {}
         sess = c.get("session", {}) or {}
         rows.append({
             "run": Path(f).parent.name,
+            "cover": is_cover,
             "regime": "growth" if (sess.get("starting_bankroll") or 0) >= 400 else "ruin",
             "gamma": c.get("gamma"), "double": bool(c.get("double_dqn")), "scale": c.get("reward_scale"),
             "batch": c.get("batch_size"), "lr_sched": c.get("lr_schedule"),
@@ -446,9 +457,12 @@ def bet_native_curve(path: str | Path, counts=tuple(BET_COUNTS), decks_remaining
     return greedy_bet_curve(load_bet_agent(path), counts, bankroll=bankroll, decks_remaining=decks_remaining)
 
 
-def load_bet_evals(runs_dir: str | Path | None = None) -> pd.DataFrame:
+def load_bet_evals(runs_dir: str | Path | None = None, include_cover: bool = False) -> pd.DataFrame:
     """Saved four-axis evals (``runs/<id>/eval_*.json``) joined with each run's config — one row per
-    (run, phase, regime, bettor). ``phase`` is 'final' or 'best-ckpt'; ``train_regime`` is the native cell."""
+    (run, phase, regime, bettor). ``phase`` is 'final' or 'best-ckpt'; ``train_regime`` is the native cell.
+
+    Like ``load_bet_runs``, EXCLUDES the bankroll-coverage sweep evals by default (they share the standard
+    agents' signature); pass ``include_cover=True`` and filter on ``cover`` for the Ch4 §4.4 comparison."""
     runs_dir = Path(runs_dir) if runs_dir else ROOT / "runs"
     rows = []
     for f in sorted(glob.glob(str(runs_dir / "*" / "eval_*.json"))):
@@ -458,6 +472,9 @@ def load_bet_evals(runs_dir: str | Path | None = None) -> pd.DataFrame:
             continue
         if rec.get("kind") != "bet_eval":
             continue
+        is_cover = "_cover_" in Path(f).parent.name
+        if is_cover and not include_cover:
+            continue
         cfg = json.load(open(Path(f).parent / "record.json", encoding="utf-8"))["config"]
         train_regime = "growth" if (cfg.get("session", {}).get("starting_bankroll", 0) >= 400) else "ruin"
         phase = "final" if rec.get("checkpoint_session") is None else "best-ckpt"
@@ -466,7 +483,7 @@ def load_bet_evals(runs_dir: str | Path | None = None) -> pd.DataFrame:
             ddk = next(k for k in m if k.startswith("drawdown_breach"))
             gr = m["growth_rate"]
             rows.append({
-                "run": Path(f).parent.name, "phase": phase, "regime": regime, "bettor": bettor,
+                "run": Path(f).parent.name, "cover": is_cover, "phase": phase, "regime": regime, "bettor": bettor,
                 "train_regime": train_regime, "seed": cfg.get("seed"), "gamma": cfg.get("gamma"),
                 "double": "on" if cfg.get("double_dqn") else "off",
                 "bankroll_feature": cfg.get("bankroll_feature", "raw"),
@@ -870,6 +887,209 @@ def plot_encoding_ablation(evals: pd.DataFrame, metric: str = "growth_1e4", titl
     plt.show()
 
 
+# --- Ch4 §4.4: the bankroll-coverage test — cycling the session start removes the starvation artifact ---
+# The fixed-start agents over-bet in the wealth region they never train on (growth < ~200u; ruin > ~400u) —
+# a mirror-imaged OOD-extrapolation artifact (§4.1). Retraining with the session start cycled over 100–600u
+# (D14) fills that region; these read the resulting cover agents (``include_cover=True``) against the fixed
+# ones and discrete-Kelly. Cover vs fixed selection differs ONLY by the ``cover`` flag — same recipe.
+_COVER_STARTS: tuple[float, ...] = (100.0, 200.0, 300.0, 400.0, 500.0, 600.0)  # the D14 training sweep
+_COVER_W_GRID: tuple[int, ...] = (50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650)
+_COVER_GAMMA = {"growth": 0.0, "ruin": 0.95}  # each arm's regime-native discount
+
+
+def _cover_fixed_agents(regime: str):
+    """(cover_agents, fixed_agents) for a regime — latest run per seed, agents loaded. Cover = the D14
+    sweep; fixed = the canonical raw recipe (γ by regime, single DQN) the report already reports."""
+    from blackjack_rl.session.persistence import load_bet_agent
+    native = load_bet_runs(include_cover=True)
+    native = native[native.regime == regime]
+    fixed_f = native[(~native.cover) & (native.bankroll_feature == "raw")
+                     & (native.gamma == _COVER_GAMMA[regime]) & (~native.double)]
+
+    def load(frame):
+        return [load_bet_agent(g.sort_values("run").iloc[-1].path) for _, g in frame.groupby("seed")]
+
+    return load(native[native.cover]), load(fixed_f)
+
+
+def bet_coverage_curves(regime: str, counts=(0, 2, 4), bankrolls: tuple[int, ...] = _COVER_W_GRID):
+    """Greedy bet vs bankroll at each fixed count, for the cover agents, the fixed-start agents, and
+    discrete-Kelly — the data behind §4.4's collapse figure (no plotting). Returns ``(by_count, bankrolls)``
+    where ``by_count[tc] = {"cover": arr[n_cover, n_W], "fixed": arr[n_fixed, n_W], "kelly": arr[n_W]}``.
+    ``regime``: 'growth' (γ=0) or 'ruin' (γ=0.95)."""
+    import numpy as np
+    from blackjack_rl.session.bet_agent import KellyBet, greedy_bet_curve
+    from blackjack_rl.session.references import load_edge_reference
+    kb = KellyBet(load_edge_reference().kelly_curve, discretize=True)
+    cover, fixed = _cover_fixed_agents(regime)
+
+    def sweep(agent, tc):
+        return np.array([greedy_bet_curve(agent, (tc,), bankroll=float(W), decks_remaining=3.0)[tc]
+                         for W in bankrolls])
+
+    by_count = {
+        tc: {
+            "cover": np.array([sweep(a, tc) for a in cover]),
+            "fixed": np.array([sweep(a, tc) for a in fixed]),
+            "kelly": np.array([kb.bet(true_count=float(tc), decks_remaining=3.0, bankroll=float(W))
+                               for W in bankrolls]),
+        }
+        for tc in counts
+    }
+    return by_count, tuple(bankrolls)
+
+
+def plot_bet_coverage(regime: str, counts=(0, 2, 4), note: str | None = None) -> None:
+    """§4.4's money figure: greedy bet vs bankroll at fixed count. The fixed-start agents' starvation hump
+    (red dashed) — over-betting in the shaded region they never train on — collapses onto discrete-Kelly's
+    floor (black dashed) once the cover agents (blue) train across the full bankroll range. Growth starves
+    the LOW end, ruin the HIGH end; the shaded band marks it."""
+    import matplotlib.pyplot as plt
+    import numpy as np
+    by_count, W = bet_coverage_curves(regime, counts)
+    fig, axes = plt.subplots(1, len(counts), figsize=(5.2 * len(counts), 4), sharey=True)
+    axes = np.atleast_1d(axes)
+    starved = (min(W) - 5, 200) if regime == "growth" else (400, max(W) + 5)  # the never-trained region
+    for ax, tc in zip(axes, counts):
+        d = by_count[tc]
+        ax.axvspan(*starved, color="0.85", alpha=0.6, zorder=0)
+        for row in d["cover"]:
+            ax.plot(W, row, color="tab:blue", lw=1, alpha=0.3)
+        if len(d["cover"]):
+            ax.plot(W, d["cover"].mean(0), "o-", color="tab:blue", lw=2, label="cover mean")
+        if len(d["fixed"]):
+            ax.plot(W, d["fixed"].mean(0), "s--", color="tab:red", lw=1.6, label="fixed mean")
+        ax.plot(W, d["kelly"], "k--", lw=1.8, label="Kelly")
+        ax.set(xlabel="bankroll (u)", ylim=(0, 8.6), title=f"true count {tc:+d}")
+        ax.grid(alpha=0.3)
+    axes[0].set(ylabel="greedy bet (u)")
+    axes[0].legend(fontsize=8)
+    fig.suptitle(f"{regime} — coverage collapses the starvation artifact onto Kelly "
+                 f"({'low' if regime == 'growth' else 'high'}-bankroll band shaded)")
+    fig.tight_layout()
+    if note:
+        fignote(note)
+    plt.show()
+
+
+def coverage_four_axis(regime: str | None = None) -> pd.DataFrame:
+    """§4.4's four-axis table: fixed vs cover agent (native regime, mean ± cross-seed SD) with Kelly/Flat
+    from the tight 20k ladder — does bankroll-generalization cost native performance? One row per
+    (regime, bettor ∈ {kelly, flat, agent-fixed, agent-cover}); growth ×1e-4/hand, ruin% and dd% as %."""
+    ev = load_bet_evals(include_cover=True)
+    ev = ev[(ev.bettor == "agent") & (ev.phase == "final") & (ev.regime == ev.train_regime)]
+    lad = ladder_baselines()
+    rows = []
+    for reg in ((regime,) if regime else ("growth", "ruin")):
+        for b in ("kelly", "flat"):
+            r = lad[(lad.regime == reg) & (lad.bettor == b)].iloc[0]
+            rows.append({"regime": reg, "bettor": b, "n": pd.NA, "growth_1e4": round(r.growth_1e4, 3),
+                         "growth_sd": pd.NA, "ruin_pct": round(r.ruin_pct, 2), "dd_pct": round(r.dd_pct, 2)})
+        native = ev[ev.regime == reg]
+        arms = [("agent-fixed", native[(~native.cover) & (native.bankroll_feature == "raw")
+                                       & (native.gamma == _COVER_GAMMA[reg]) & (native.double == "off")]),
+                ("agent-cover", native[native.cover])]
+        for name, sub in arms:
+            sub = sub.sort_values("run").groupby("seed", as_index=False).tail(1)
+            if sub.empty:
+                continue
+            rows.append({"regime": reg, "bettor": name, "n": int(sub.seed.nunique()),
+                         "growth_1e4": round(sub.growth_1e4.mean(), 3),
+                         "growth_sd": round(sub.growth_1e4.std(ddof=1), 3) if len(sub) > 1 else 0.0,
+                         "ruin_pct": round(sub.ruin_pct.mean(), 2), "dd_pct": round(sub.dd_pct.mean(), 2)})
+    return pd.DataFrame(rows)
+
+
+def coverage_growth_ztest(regime: str) -> dict:
+    """Unpaired z-test (no CRN between arms) on cover-vs-fixed native growth for a regime →
+    ``{regime, fixed, cover, gap, z, p, n_cover, n_fixed}``. The honest 'did coverage move growth' claim."""
+    import math
+    t = coverage_four_axis(regime)
+    fx, cv = t[t.bettor == "agent-fixed"].iloc[0], t[t.bettor == "agent-cover"].iloc[0]
+    se = math.sqrt(fx.growth_sd ** 2 / fx.n + cv.growth_sd ** 2 / cv.n)
+    z = (cv.growth_1e4 - fx.growth_1e4) / se if se else float("nan")
+    return {"regime": regime, "fixed": float(fx.growth_1e4), "cover": float(cv.growth_1e4),
+            "gap": round(float(cv.growth_1e4 - fx.growth_1e4), 3), "z": round(float(z), 2),
+            "p": round(float(math.erfc(abs(z) / math.sqrt(2))), 4), "n_cover": int(cv.n), "n_fixed": int(fx.n)}
+
+
+def coverage_visitation(regime: str, n_sessions: int = 200, seed: int = 0) -> pd.DataFrame:
+    """The mechanism behind §4.4: how much of each agent's PLAY lands in the starved band. Replays
+    ``n_sessions`` of the cover vs the fixed agent (seed-matched; RNG seeded once at the boundary) and
+    reports the visited pre-deal bankroll distribution — the cover agent spends real time where the fixed
+    one never went. Columns: bettor, min, p50, max, frac_starved_pct (% of hands in the never-trained band)."""
+    import random
+    import numpy as np
+    from blackjack_rl.session.env import SessionEnv, growth_config, ruin_config
+    from blackjack_rl.session.persistence import load_bet_agent
+    from strategies.basic_strategy import BasicStrategy
+    runs = load_bet_runs(include_cover=True)
+    runs = runs[runs.regime == regime]
+
+    def pick(frame):
+        g = frame[frame.seed == seed]
+        return load_bet_agent(g.sort_values("run").iloc[-1].path) if not g.empty else None
+
+    cover_ag = pick(runs[runs.cover])
+    fixed_ag = pick(runs[(~runs.cover) & (runs.bankroll_feature == "raw")
+                         & (runs.gamma == _COVER_GAMMA[regime]) & (~runs.double)])
+    env = SessionEnv(growth_config() if regime == "growth" else ruin_config())
+    play = BasicStrategy()
+    rows = []
+    for name, ag, cyc in [("cover", cover_ag, True), ("fixed", fixed_ag, False)]:
+        if ag is None:
+            continue
+        random.seed(seed)  # seed once at the boundary, not per session
+        seen: list[float] = []
+        for i in range(n_sessions):
+            start = _COVER_STARTS[i % len(_COVER_STARTS)] if cyc else None
+            cap = env.run(play, ag, starting_bankroll=start)
+            seen.extend(h.bankroll_before for h in cap.hands)
+        a = np.array(seen)
+        starved = (a < 200) if regime == "growth" else (a > 400)  # the fixed regime's never-trained band
+        rows.append({"bettor": name, "min": round(float(a.min()), 1), "p50": round(float(np.median(a)), 1),
+                     "max": round(float(a.max()), 1), "frac_starved_pct": round(float(100 * starved.mean()), 2)})
+    return pd.DataFrame(rows)
+
+
+def plot_coverage_growth(note: str | None = None) -> None:
+    """§4.5's payoff test, per seed: native growth for the fixed vs cover agents, both regimes, Kelly/Flat
+    from the 20k ladder dashed. Dots (not error bars) so the spread is honest — at n=6 the coverage mean is
+    indistinguishable from fixed: five seeds cluster tighter/better but one converges to a flat over-bet, so
+    removing the bankroll artifact does NOT move performance. The 'coverage recovers growth' payoff is
+    falsified; the ablation's verdict stands (nothing wealth-shaped is load-bearing)."""
+    import matplotlib.pyplot as plt
+    import numpy as np
+    ev = load_bet_evals(include_cover=True)
+    ev = ev[(ev.bettor == "agent") & (ev.phase == "final") & (ev.regime == ev.train_regime)]
+    lad = ladder_baselines()
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
+    for ax, reg in zip(axes, ("growth", "ruin")):
+        native = ev[ev.regime == reg]
+        arms = {"fixed": native[(~native.cover) & (native.bankroll_feature == "raw")
+                                 & (native.gamma == _COVER_GAMMA[reg]) & (native.double == "off")],
+                "cover": native[native.cover]}
+        for i, (name, sub) in enumerate(arms.items()):
+            vals = sub.sort_values("run").groupby("seed", as_index=False).tail(1).growth_1e4.to_numpy()
+            ax.bar(i, vals.mean() if len(vals) else 0, color=_LADDER_COLORS["agent"], alpha=0.45, width=0.6)
+            if len(vals):
+                ax.scatter(i + np.linspace(-0.2, 0.2, len(vals)), vals, s=24, color=_LADDER_COLORS["agent"],
+                           edgecolor="black", linewidth=0.5, zorder=3)
+        for b, ls in (("kelly", "-."), ("flat", "--")):
+            y = float(lad[(lad.regime == reg) & (lad.bettor == b)].growth_1e4.iloc[0])
+            ax.axhline(y, ls=ls, color=_LADDER_COLORS[b], lw=1.4, label=f"{b} (20k)")
+        ax.set_xticks([0, 1])
+        ax.set_xticklabels(["fixed start", "coverage"])
+        ax.set(title=f"{reg} regime", ylabel="growth ×1e-4/hand" if reg == "growth" else "")
+        ax.grid(alpha=0.3, axis="y")
+        ax.legend(fontsize=7)
+    fig.suptitle("filling the coverage gap does not move growth — cover ≈ fixed, one seed over-bets (n=6)")
+    fig.tight_layout()
+    if note:
+        fignote(note)
+    plt.show()
+
+
 # --- learned-representation probe (Ch4) — penultimate-layer embedding of a state grid -----------------
 # Promoted from the scratch investigation notebook: the net's internal representation, projected to 2-D and
 # coloured by bet / count / bankroll. Clusters by count ⇒ learned the edge; by bankroll ⇒ keyed on wealth.
@@ -913,6 +1133,25 @@ def plot_bet_embedding(coords, color, label: str, title: str, cmap: str = "virid
     plt.colorbar(pts, label=label)
     plt.gca().set(xticks=[], yticks=[], title=title)
     plt.tight_layout()
+    if note:
+        fignote(note)
+    plt.show()
+
+
+def plot_bet_embedding_row(coords, states, bet, note: str | None = None) -> None:
+    """The three colourings of one projection **side by side** — bankroll, true count, and the greedy bet —
+    so the same points can be compared across all three at once (the whole point: read them together)."""
+    import matplotlib.pyplot as plt
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.6))
+    panels = [(states.bankroll, "bankroll (u)", "viridis", "BANKROLL"),
+              (states.true_count, "true count", "coolwarm", "TRUE COUNT"),
+              (bet, "bet level", "plasma", "BET (what the policy does)")]
+    for ax, (color, label, cmap, title) in zip(axes, panels):
+        pts = ax.scatter(coords[:, 0], coords[:, 1], c=color, cmap=cmap, s=8, alpha=0.7)
+        fig.colorbar(pts, ax=ax, label=label, fraction=0.046, pad=0.04)
+        ax.set(xticks=[], yticks=[], title=f"coloured by {title}")
+    fig.suptitle("t-SNE of the penultimate layer — one projection, three colourings")
+    fig.tight_layout()
     if note:
         fignote(note)
     plt.show()

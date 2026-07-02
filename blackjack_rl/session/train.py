@@ -83,12 +83,21 @@ class BetTrainConfig:
     reward_scale: float = 1.0
     bankroll_scale: float = GROWTH_BANKROLL
     bankroll_feature: str = "raw"  # bet-encoder ablation: "raw" | "logratio" | "none" (drop bankroll)
+    bankroll_starts: tuple[float, ...] | None = None  # cycle each session's start over these (the D14
+                                                      # bankroll-coverage sweep); None = fixed session start
     seed: int = 0
     torch_threads: int = 1
 
     def __post_init__(self) -> None:
         if self.n_sessions < 1:
             raise ValueError(f"n_sessions must be >= 1, got {self.n_sessions}")
+        if self.bankroll_starts is not None:
+            if not self.bankroll_starts:
+                raise ValueError("bankroll_starts must be non-empty when set")
+            if min(self.bankroll_starts) <= self.session.ruin_threshold:
+                raise ValueError(
+                    f"every bankroll_start must exceed ruin_threshold ({self.session.ruin_threshold}); "
+                    f"got min {min(self.bankroll_starts)}")
 
 
 # probe counts for the checkpoint bet-vs-count curve (watch the spread form over training)
@@ -155,7 +164,9 @@ def train_bet(
         agent.epsilon = epsilon_at(i)
         for group in optimizer.param_groups:  # anneal the step (no-op for a constant schedule)
             group["lr"] = lr_at(i)
-        cap = env.run(play, agent)  # <- single session-generation seam (current eps-greedy net)
+        start_bankroll = (config.bankroll_starts[i % len(config.bankroll_starts)]
+                          if config.bankroll_starts else None)  # bankroll-coverage sweep (D14), else fixed
+        cap = env.run(play, agent, starting_bankroll=start_bankroll)  # single session-generation seam
         for transition in session_to_transitions(
             cap, encode=agent.encode_state, n_levels=len(agent.levels), ruin_reward=config.ruin_penalty,
             reward_scale=config.reward_scale,

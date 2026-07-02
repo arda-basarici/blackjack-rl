@@ -35,6 +35,7 @@ lever fixes it*.
 | 12 | Longer sweep (2.5× data, double×regime×batch) | exploratory | more data → flat-1; tails visit ramps, don't hold; ⚠ double no-op at γ=0 |
 | 13 | **H3 + multi-seed hardening (deliverable)** | **central** | ramps **far worse than flat** (dd 14–18%); RL≈flat CI-backed; **double-ON safety was seed-luck**; γ0.9 too low |
 | 14 | **Encoding ablation (wealth vs thin edge)** | **central** | drop/re-encode bankroll → **encoding-invariant, all ≈ flat** → the wall is FUNDAMENTAL (thin edge), not representational |
+| 15 | **Bankroll-coverage sweep (D14 seam)** | **central** | mirror = starvation (bet collapses to Kelly) but **cosmetic** — cover ≈ fixed ≈ Flat @n=6; the n=3 gain was a fluke |
 | — | Prior committed baselines (B1–B2c) | committed | reference index |
 
 ---
@@ -475,6 +476,46 @@ the agents are mostly **flat**, not wealth-scaling; (b) "learned half of Kelly" 
 mostly flat + occasional *coarse* gating (seed-dependent). **The arc:** RL≈flat → hypothesise wealth
 (embedding) → **build the ablation, falsify it** → the thin-edge wall. Encoder seam:
 `bet_agent.bankroll_feature` (`raw|logratio|none`) + `bet_feature_dim`.
+
+## Test 15 — Bankroll-coverage sweep: the mirror is starvation, the fix is cosmetic [CENTRAL]
+
+**Purpose.** §4.1's t-SNE mirror — growth bettor bets big when *poor*, ruin bettor when *rich* — looked like
+a wealth strategy. Two-part hypothesis: (1) it's an OOD **starvation** artifact — each regime over-bets
+exactly the bankroll region it never trains in (growth <200u, ruin >400u); (2) that reckless over-betting is
+*costing* growth, so removing it should recover some. Test both by training across the whole wealth axis.
+
+**Config (diff from shared).** New `--bankroll-starts 100,200,300,400,500,600` (D14 seam:
+`SessionEnv.run(starting_bankroll=)` + `BetTrainConfig.bankroll_starts`, validated > ruin_threshold) — cycle
+each session's start over the range instead of the fixed W0. Two arms, growth (γ=0) and ruin (γ=0.95),
+**6 seeds each** (2 waves of 3); else the settled recipe (batch512, scale50, harmonic lr, ε0.5→0, raw).
+Four-axis eval @2000 sess/cell, cover vs fixed, Kelly/Flat from the 20k ladder.
+
+**Results.**
+- *Part 1 — CONFIRMED.* Fixed agents over-bet in their starved band (TC0: growth 4.5u@50u, ruin 5.8u@650u,
+  where Kelly=1u); **coverage collapses both humps onto Kelly's floor**. Visitation: cover plays **26%** of
+  hands <200u vs fixed's **0.05%** — the gap is filled.
+- *Part 2 — FALSIFIED.* Four-axis native growth (×1e-4/hand, n=6):
+
+  | regime | cover | fixed | Kelly(20k) | Flat(20k) | cover vs fixed |
+  |---|---|---|---|---|---|
+  | growth | −0.204 ±0.18 | −0.193 ±0.08 | −0.048 | −0.150 | z=−0.14, p=0.89 |
+  | ruin   | −0.476 ±0.09 | −0.481 ±0.04 | −0.348 | −0.395 | z=+0.13, p=0.90 |
+
+  Cover ≈ fixed ≈ Flat, n.s. on every axis (also ruin%, dd%). 5/6 seeds cluster tight; **1 per arm converges
+  to a flat over-bet** (growth s5 −0.559; ruin s3 −0.645, dd 3.9%) — valid draws (loss normal ~0.11, bounded
+  bets), not divergence, so not excludable.
+
+**⚠ n=3 → n=6 correction.** Wave 1 (n=3) showed a *significant* ruin gain (−0.428 vs −0.481, p=0.005) + a
+marginal growth gain. **Neither survived 3 more seeds** — a small-sample artifact of exactly the kind Ch4
+keeps catching. n=6 is the honest number; the n=3 result is footnoted in §4.5, not reported.
+
+**Read.** The mirror WAS starvation (removable by coverage) but the over-betting lived where native play
+almost never goes, so erasing it is **cosmetic** — cover beats neither fixed nor Flat, never nears Kelly.
+Same verdict as Test 14 (encoding ablation): nothing wealth-shaped is load-bearing; the wall is the thin
+count edge. Runs `*_bet-agent_{growth,ruin}_cover_b512_2000sess` (6 each) + evals beside them (`runs/`
+git-ignored; loaders default-exclude `_cover_`, `include_cover=True` to read).
+
+**Tier:** central (n=6 four-axis CI-backed; Ch4 §4.5 deliverable).
 
 ## Prior committed baselines (B1–B2c) — reference index
 

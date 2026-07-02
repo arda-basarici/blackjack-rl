@@ -224,16 +224,18 @@ class SessionEnv:
         self.config = config
         self.sim_config = sim_config if sim_config is not None else problem_b_config()
 
-    def run(self, play: Strategy, bet: BetPolicy) -> SessionCapture:
+    def run(self, play: Strategy, bet: BetPolicy, starting_bankroll: float | None = None) -> SessionCapture:
         """Play one session off the *current* global-RNG state (does not seed — see ``run_sessions``).
 
         A fresh shuffled shoe and the full starting bankroll, as a counter sitting down at a new
         table. ``play`` decides hand actions through the engine; ``bet`` sizes each wager from the
-        pre-deal state.
+        pre-deal state. ``starting_bankroll`` overrides ``config.starting_bankroll`` for this one
+        session — the per-session W0 seam the bankroll-coverage sweep drives (D14).
         """
         cfg = self.sim_config
         deck = Deck(num_decks=cfg.num_decks, counting_system=HiLoCount())
-        bankroll = self.config.starting_bankroll
+        start = self.config.starting_bankroll if starting_bankroll is None else float(starting_bankroll)
+        bankroll = start
         wager_lo = float(self.config.min_wager)  # table minimum; 0 lets a bettor sit out (Wonging)
         spread_hi = float(max(self.config.bet_spread))
 
@@ -287,7 +289,7 @@ class SessionEnv:
             hands=records,
             ruined=ruined,
             final_bankroll=bankroll,
-            starting_bankroll=self.config.starting_bankroll,
+            starting_bankroll=start,
         )
 
 
