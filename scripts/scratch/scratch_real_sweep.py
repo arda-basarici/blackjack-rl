@@ -7,7 +7,7 @@ log-reward x reward_scale (additive to the argmax; tests optimization-scale), fu
 (target net + sync for gamma>0). Streams tagged checkpoints to logs/live.log; saves the final
 bet-vs-count curve as JSON. THROWAWAY diagnostic, not a committed deliverable.
 
-    python scripts/scratch_real_sweep.py <tag> <n_sessions> <gamma> <scale> <batch> <eps> <lr>
+    python scripts/scratch/scratch_real_sweep.py <tag> <n_sessions> <gamma> <scale> <batch> <eps> <lr>
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ TRAIN_EVERY = 4
 TARGET_SYNC = 1_000
 BUFFER = 50_000
 RUIN_REWARD = -1.0
-RESULTS_DIR = Path(__file__).resolve().parent.parent / "logs" / "real_sweep"
+RESULTS_DIR = Path(__file__).resolve().parents[2] / "logs" / "real_sweep"
 
 
 def _git_hash() -> str:

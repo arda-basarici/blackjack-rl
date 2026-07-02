@@ -3,7 +3,7 @@
 Answers "does the wandering curve actually MATTER?" — scores the trained agent vs discrete-Kelly + Flat
 on full sessions (growth / ruin / drawdown / bankroll), both regimes, via cell_eval. Throwaway probe.
 
-    .venv\\Scripts\\python.exe scripts/scratch_eval_pt.py <path.pt> [n_sessions]
+    .venv\\Scripts\\python.exe scripts/scratch/scratch_eval_pt.py <path.pt> [n_sessions]
 """
 from __future__ import annotations
 

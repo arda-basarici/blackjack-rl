@@ -14,8 +14,8 @@ result cannot be blamed on the reward-scale mismatch either.
 PASS signature: a STABLE monotone ramp (<=0 -> 1, +2 -> 2, +4 -> 5, +6 -> 8) that HOLDS (deterministic
 reward => no argmax wandering). FAIL: flat or wandering -> hunt the bug before any more training.
 
-    .venv\\Scripts\\python.exe scripts/scratch_oracle.py sanity            # print reward table, no train
-    .venv\\Scripts\\python.exe scripts/scratch_oracle.py <n_sessions> <scale>   # train
+    .venv\\Scripts\\python.exe scripts/scratch/scratch_oracle.py sanity            # print reward table, no train
+    .venv\\Scripts\\python.exe scripts/scratch/scratch_oracle.py <n_sessions> <scale>   # train
 """
 from __future__ import annotations
 

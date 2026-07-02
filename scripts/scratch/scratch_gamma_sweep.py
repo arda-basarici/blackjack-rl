@@ -13,7 +13,7 @@ THROWAWAY diagnostic, NOT a committed deliverable. One gamma per invocation (lau
 streams tagged checkpoint lines to logs/live.log and writes the final bet-vs-count curve to a JSON in
 the scratch results dir for the aggregator.
 
-    .venv\\Scripts\\python.exe scripts/scratch_gamma_sweep.py <n_sessions> <gamma>
+    .venv\\Scripts\\python.exe scripts/scratch/scratch_gamma_sweep.py <n_sessions> <gamma>
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ from blackjack_rl.session.train import BetTrainConfig, train_bet
 PROBE_COUNTS: tuple[int, ...] = (-4, -2, 0, 2, 4, 6, 8)  # matches train._PROBE_COUNTS
 SEED = 0
 EPSILON = 0.1
-RESULTS_DIR = Path(__file__).resolve().parent.parent / "logs" / "gamma_sweep"
+RESULTS_DIR = Path(__file__).resolve().parents[2] / "logs" / "gamma_sweep"
 
 
 def _log(line: str) -> None:

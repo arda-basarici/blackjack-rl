@@ -115,7 +115,7 @@ Replaces the realized log-reward with its **deterministic expectation** from the
 (`(b/W)·mean_return − ½(b/W)²·variance`), removing all per-hand noise. Scaled to O(1) so a flat result
 could only mean a bug.
 
-**Config:** 2000 sessions, **oracle reward**, γ=0, scale=1000, batch=128, ε=0.1. (`scripts/scratch_oracle.py`)
+**Config:** 2000 sessions, **oracle reward**, γ=0, scale=1000, batch=128, ε=0.1. (`scripts/scratch/scratch_oracle.py`)
 
 | Checkpoint | curve (−4…+8) |
 |---|---|
@@ -133,7 +133,7 @@ So the real-reward flatline is a **noise/coverage/scale wall, not a bug.**
 ## Test 4 — Real-reward lever sweep (which lever breaks the flatline?)
 
 6 parallel runs, real reward, mostly one-knob-off a baseline (γ=0, scale=100, batch=128, ε=0.1).
-(`scripts/scratch_real_sweep.py`)
+(`scripts/scratch/scratch_real_sweep.py`)
 
 | Run | n_sess | γ | scale | batch | ε | final curve (−4…+8) | shape |
 |---|---|---|---|---|---|---|---|
