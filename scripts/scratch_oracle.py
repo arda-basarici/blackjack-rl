@@ -29,11 +29,13 @@ import torch
 
 from strategies.basic_strategy import BasicStrategy
 
-from blackjack_rl.core.paths import LOGS_DIR
+from blackjack_rl.core.paths import LOGS_DIR, RUNS_DIR
+from blackjack_rl.core.persistence import save_run
 from blackjack_rl.dqn.deep_q import make_target, td_update
 from blackjack_rl.dqn.replay import ReplayBuffer, Transition
 from blackjack_rl.session.bet_agent import BetAgent, greedy_bet_curve
 from blackjack_rl.session.env import SessionEnv, growth_config
+from blackjack_rl.session.persistence import construction_of
 from blackjack_rl.session.references import load_edge_reference
 
 PROBE_COUNTS: tuple[int, ...] = (-4, -2, 0, 2, 4, 6, 8)
@@ -119,6 +121,7 @@ def train_oracle(n_sessions: int, scale: float) -> None:
     probe_depth = env.sim_config.num_decks / 2.0
     env_steps = 0
     loss_sum, loss_count = 0.0, 0.0
+    learning_curve: list[dict] = []
     _log(f"[oracle] START n={n_sessions} scale={scale:g} gamma={GAMMA} eps={EPSILON} seed={SEED}")
     start = time.perf_counter()
 
@@ -132,10 +135,12 @@ def train_oracle(n_sessions: int, scale: float) -> None:
                 loss_sum += loss
                 loss_count += 1
 
-        if (i + 1) % max(1, n_sessions // 8) == 0:
+        if (i + 1) % max(1, n_sessions // 20) == 0:
             curve = greedy_bet_curve(agent, PROBE_COUNTS, bankroll=probe_bankroll, decks_remaining=probe_depth)
             ramp = " ".join(f"{c:+d}:{curve[c]:g}" for c in PROBE_COUNTS)
             avg = loss_sum / loss_count if loss_count else float("nan")
+            learning_curve.append({"session": i + 1, "recent_loss": round(avg, 6),
+                                   "bet_by_count": {int(c): float(curve[c]) for c in PROBE_COUNTS}})
             _log(f"[oracle] {i + 1}/{n_sessions} loss={avg:.4f} | bet[{ramp}]")
             loss_sum, loss_count = 0.0, 0.0
 
@@ -143,6 +148,17 @@ def train_oracle(n_sessions: int, scale: float) -> None:
     curve = greedy_bet_curve(agent, PROBE_COUNTS, bankroll=probe_bankroll, decks_remaining=probe_depth)
     ramp = " ".join(f"{c:+d}:{curve[c]:g}" for c in PROBE_COUNTS)
     _log(f"[oracle] DONE ({elapsed:.0f}s) final bet[{ramp}]")
+
+    # persist as a loadable 'bet_oracle' run (kind != bet_agent, so the bet-run loaders skip it) — Ch3 plots
+    # its orbit like any run: the positive control that the pipeline CAN learn Kelly on a denoised signal.
+    config_prov = {"reward": "oracle", "gamma": GAMMA, "reward_scale": scale, "n_sessions": n_sessions,
+                   "batch_size": BATCH, "epsilon": EPSILON, "seed": SEED, "buffer": BUFFER,
+                   "note": "denoised expected log-reward (2nd-order) from the committed edge-by-count curve"}
+    record = {"kind": "bet_oracle", "construction": construction_of(agent),
+              "config": config_prov, "metrics": {"learning_curve": learning_curve}}
+    run_dir = save_run(RUNS_DIR, record, run_id=f"{datetime.now():%Y%m%d-%H%M%S}_bet-oracle_{n_sessions}sess")
+    torch.save(agent.q_net.state_dict(), run_dir / "model.pt")
+    _log(f"[oracle] saved run -> {run_dir}")
 
 
 def main() -> None:

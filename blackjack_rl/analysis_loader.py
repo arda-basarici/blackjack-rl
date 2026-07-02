@@ -312,3 +312,607 @@ def fignote(text: str) -> None:
     """Drop a muted provenance note beneath the current matplotlib figure (call before ``plt.show()``)."""
     import matplotlib.pyplot as plt
     plt.gcf().text(0.99, -0.02, text, ha="right", va="top", fontsize=8, color="#8a8a8a", style="italic")
+
+
+# --- Problem B (B2d) — the learned bettor. Bet-aware companions to the loaders above (the play-side
+# ``load_runs`` reads a ``diff``/``edge`` record shape the ``kind=='bet_agent'`` records don't have). ----
+
+BET_COUNTS: list[int] = [-4, -2, 0, 2, 4, 6, 8]     # the checkpoint probe counts
+KELLY_LADDER: dict[int, int] = {-4: 1, -2: 1, 0: 1, 2: 2, 4: 5, 6: 8, 8: 8}  # discrete-Kelly target
+
+
+def _bet_at(checkpoint: dict, count: int) -> float:
+    bets = checkpoint["bet_by_count"]                 # JSON stringifies the int keys
+    return float(bets.get(str(count), bets.get(count)))
+
+
+def load_bet_runs(runs_dir: str | Path | None = None) -> pd.DataFrame:
+    """Every ``kind=='bet_agent'`` run as one tidy frame (config + trajectory length)."""
+    runs_dir = Path(runs_dir) if runs_dir else ROOT / "runs"
+    rows = []
+    for f in sorted(glob.glob(str(runs_dir / "*" / "record.json")), key=os.path.getmtime):
+        try:
+            r = json.load(open(f, encoding="utf-8"))
+        except Exception:
+            continue
+        if r.get("kind") != "bet_agent":
+            continue
+        c = r.get("config", {}) or {}
+        m = r.get("metrics", {}) or {}
+        sess = c.get("session", {}) or {}
+        rows.append({
+            "run": Path(f).parent.name,
+            "regime": "growth" if (sess.get("starting_bankroll") or 0) >= 400 else "ruin",
+            "gamma": c.get("gamma"), "double": bool(c.get("double_dqn")), "scale": c.get("reward_scale"),
+            "batch": c.get("batch_size"), "lr_sched": c.get("lr_schedule"),
+            "bankroll_feature": c.get("bankroll_feature", "raw"), "seed": c.get("seed"),
+            "n_sess": c.get("n_sessions"), "n_ckpt": len(m.get("learning_curve", [])),
+            "path": str(Path(f).parent),
+        })
+    return pd.DataFrame(rows)
+
+
+def oracle_run(runs_dir: str | Path | None = None) -> str | None:
+    """Path of the latest denoised-reward **oracle** diagnostic (``kind=='bet_oracle'``) — the positive
+    control: fed the *expected* (noise-free) log-reward, the SAME DQN learns a clean, stable Kelly ramp, so
+    the real-reward flatline is the signal/coverage wall, not a bug or a capacity limit. ``None`` if absent.
+    Its record carries a ``learning_curve`` in the bet-run shape, so ``bet_trajectory`` / ``plot_bet_orbit``
+    read it directly (it is tagged ``bet_oracle``, so ``load_bet_runs`` correctly skips it)."""
+    runs_dir = Path(runs_dir) if runs_dir else ROOT / "runs"
+    hits = []
+    for f in glob.glob(str(runs_dir / "*bet-oracle*" / "record.json")):
+        try:
+            if json.load(open(f, encoding="utf-8")).get("kind") == "bet_oracle":
+                hits.append(Path(f).parent)
+        except Exception:
+            continue
+    return str(max(hits, key=os.path.getmtime)) if hits else None
+
+
+# --- coverage: the true-count visit distribution (Ch3.4) — direct evidence for "high counts are rare" ----
+
+def count_frequency() -> pd.DataFrame:
+    """True-count visit frequency from the committed 20M-hand edge reference (each per-count bucket carries
+    its sample count ``n``). The evidence behind Ch3.4's coverage wall: the counts where Kelly bets big are
+    the counts the agent almost never sees. Columns: ``true_count``, ``n``, ``frac`` (share of all hands)."""
+    from blackjack_rl.session.references import load_edge_reference
+    edges = load_edge_reference().edges
+    df = pd.DataFrame([{"true_count": c, "n": e.n} for c, e in edges.items()]).sort_values("true_count")
+    df["frac"] = df["n"] / df["n"].sum()
+    return df.reset_index(drop=True)
+
+
+def plot_count_frequency(lo: int = -8, hi: int = 12, note: str | None = None) -> None:
+    """The true-count visit distribution (20M-hand reference), log-y so the rarity is legible — the coverage
+    wall behind Ch3.4. The region where discrete-Kelly bets above the table minimum (TC >= +2) is shaded:
+    exactly the counts that call for a big bet are visited a fraction of a percent of the time."""
+    import matplotlib.pyplot as plt
+    d = count_frequency()
+    d = d[(d.true_count >= lo) & (d.true_count <= hi)]
+    plt.figure(figsize=(8, 4))
+    plt.bar(d.true_count, d.frac * 100, color=_LADDER_COLORS["flat"], alpha=0.85, width=0.9)
+    plt.axvspan(1.5, hi + 0.5, color=_LADDER_COLORS["kelly"], alpha=0.12, label="Kelly bets > 1u (TC >= +2)")
+    plt.gca().set(xlabel="true count", ylabel="% of all hands (log scale)", yscale="log",
+                  title="high counts are rare — the coverage wall (20M-hand reference)")
+    plt.legend(fontsize=8)
+    plt.grid(alpha=0.3, axis="y")
+    if note:
+        fignote(note)
+    plt.show()
+
+
+def bet_trajectory(path: str | Path):
+    """(sessions, loss, bets) for one run — ``bets`` is the (checkpoint, count) matrix (the orbit)."""
+    import numpy as np
+    lc = json.load(open(Path(path) / "record.json", encoding="utf-8"))["metrics"]["learning_curve"]
+    sessions = np.array([cp["session"] for cp in lc])
+    loss = np.array([cp["recent_loss"] if cp.get("recent_loss") is not None else np.nan for cp in lc], float)
+    bets = np.array([[_bet_at(cp, c) for c in BET_COUNTS] for cp in lc], dtype=float)
+    return sessions, loss, bets
+
+
+def bet_kelly_distance(bets):
+    """L1 distance of each checkpoint's bet curve to the discrete-Kelly ladder (low = near-Kelly)."""
+    import numpy as np
+    return np.abs(bets - np.array([KELLY_LADDER[c] for c in BET_COUNTS])).sum(axis=1)
+
+
+def near_kelly_runs(regime: str | None = None, n: int = 4, runs_dir: str | Path | None = None) -> pd.DataFrame:
+    """The ``n`` bet runs whose training trajectory gets **closest** to the discrete-Kelly ladder (smallest
+    min L1-distance over all its checkpoints) — the runs that actually *visit* Kelly, for the distance-to-
+    Kelly figure (so the dips reach the ~Kelly line, not an arbitrary last-4). Optional regime filter; ranked
+    closest-first with a ``min_kelly_dist`` column."""
+    df = load_bet_runs(runs_dir)
+    if regime:
+        df = df[df.regime == regime]
+    dists = []
+    for _, r in df.iterrows():
+        try:
+            dists.append(float(bet_kelly_distance(bet_trajectory(r.path)[2]).min()))
+        except Exception:
+            dists.append(float("inf"))
+    df = df.assign(min_kelly_dist=dists).sort_values("min_kelly_dist")
+    # one run per config (drop re-runs of the same cell) so the figure's traces are distinct
+    return df.drop_duplicates(subset=["regime", "double", "lr_sched", "seed"], keep="first").head(n)
+
+
+def bet_native_curve(path: str | Path, counts=tuple(BET_COUNTS), decks_remaining: float = 3.0) -> dict:
+    """The trained agent's greedy bet-vs-count at its NATIVE bankroll (the honest policy probe — not the
+    OOD sweep). Rebuilds the agent from the run dir and reads its deterministic policy."""
+    from blackjack_rl.session.bet_agent import greedy_bet_curve
+    from blackjack_rl.session.persistence import load_bet_agent
+    cfg = json.load(open(Path(path) / "record.json", encoding="utf-8"))["config"]
+    bankroll = float((cfg.get("session") or {}).get("starting_bankroll") or 400.0)
+    return greedy_bet_curve(load_bet_agent(path), counts, bankroll=bankroll, decks_remaining=decks_remaining)
+
+
+def load_bet_evals(runs_dir: str | Path | None = None) -> pd.DataFrame:
+    """Saved four-axis evals (``runs/<id>/eval_*.json``) joined with each run's config — one row per
+    (run, phase, regime, bettor). ``phase`` is 'final' or 'best-ckpt'; ``train_regime`` is the native cell."""
+    runs_dir = Path(runs_dir) if runs_dir else ROOT / "runs"
+    rows = []
+    for f in sorted(glob.glob(str(runs_dir / "*" / "eval_*.json"))):
+        try:
+            rec = json.load(open(f, encoding="utf-8"))
+        except Exception:
+            continue
+        if rec.get("kind") != "bet_eval":
+            continue
+        cfg = json.load(open(Path(f).parent / "record.json", encoding="utf-8"))["config"]
+        train_regime = "growth" if (cfg.get("session", {}).get("starting_bankroll", 0) >= 400) else "ruin"
+        phase = "final" if rec.get("checkpoint_session") is None else "best-ckpt"
+        for label, m in rec["metrics"].items():
+            regime, bettor = label.split("/")
+            ddk = next(k for k in m if k.startswith("drawdown_breach"))
+            gr = m["growth_rate"]
+            rows.append({
+                "run": Path(f).parent.name, "phase": phase, "regime": regime, "bettor": bettor,
+                "train_regime": train_regime, "seed": cfg.get("seed"), "gamma": cfg.get("gamma"),
+                "double": "on" if cfg.get("double_dqn") else "off",
+                "bankroll_feature": cfg.get("bankroll_feature", "raw"),
+                "growth_1e4": gr["value"] * 1e4, "ruin_pct": m["ruin"]["estimate"] * 100,
+                # the eval's own Monte-Carlo 95% CI on the growth estimate — the honest margin for a
+                # deterministic (cached) baseline, which has no seed spread of its own.
+                "growth_lo_1e4": gr.get("low", float("nan")) * 1e4, "growth_hi_1e4": gr.get("high", float("nan")) * 1e4,
+                "dd_pct": m[ddk]["estimate"] * 100, "n_sessions": rec["n_sessions"],
+            })
+    return pd.DataFrame(rows)
+
+
+def bet_multiseed_summary(evals: pd.DataFrame) -> pd.DataFrame:
+    """Per-config mean/std across seeds for the native-regime agent cell — the CI-backed view. Carries all
+    three scalar axes (growth, ruin, deep-drawdown) so the four-axis table reads complete. Grouped by
+    ``bankroll_feature`` too, so the growth encodings (raw/logratio/none) stay **separate** rows instead of
+    silently pooling into one — they are different agents, and the ``raw`` cell is the headline."""
+    native = evals[(evals.bettor == "agent") & (evals.regime == evals.train_regime)]
+    return (native.groupby(["train_regime", "gamma", "double", "bankroll_feature", "phase"])
+            .agg(n=("seed", "nunique"), growth=("growth_1e4", "mean"), growth_sd=("growth_1e4", "std"),
+                 ruin=("ruin_pct", "mean"), dd=("dd_pct", "mean"), dd_sd=("dd_pct", "std"))
+            .round(2).reset_index())
+
+
+# --- committed high-n bet-ladder: the TIGHT Kelly/Flat baseline ------------------------------------
+# The four-axis agent evals cache Kelly/Flat at the *agent's* eval size (2000 sess) → a single noisy MC
+# estimate whose growth CI spans zero (and whose growth point can land on the wrong side of 0). The B2c
+# bet-ladder measured the SAME discrete-Kelly / Flat policies at 20,000 sess/cell (10× tighter, verified
+# byte-identical policy: same edge reference, KellyBet(discrete)@400u = 1 1 1 2 5 8 8). Report baselines
+# read THIS; only the agent (whose real error bar is the 6-seed spread, not eval-MC) reads the 2000-sess
+# evals. Select by config (largest n_sessions_per_cell), never by timestamp.
+
+def _latest_ladder_record(runs_dir: str | Path | None = None) -> dict | None:
+    """The committed bet-ladder record with the most sessions/cell (the 20k run, not a 2k sanity pass)."""
+    runs_dir = Path(runs_dir) if runs_dir else ROOT / "runs"
+    best = None
+    for f in glob.glob(str(runs_dir / "*bet-ladder*" / "record.json")):
+        try:
+            r = json.load(open(f, encoding="utf-8"))
+        except Exception:
+            continue
+        if r.get("kind") != "bet_ladder":
+            continue
+        n = (r.get("config") or {}).get("n_sessions_per_cell", 0)
+        if best is None or n > best[0]:
+            best = (n, r, Path(f).parent.name)
+    return None if best is None else {"n": best[0], "record": best[1], "run": best[2]}
+
+
+def ladder_baselines(runs_dir: str | Path | None = None) -> pd.DataFrame:
+    """The committed high-n bet-ladder's baselines as a tidy frame (one row per regime × bettor) — the
+    tight reference the report scores the agent against. ``bettor`` is 'flat' / 'kelly' (= discrete Kelly,
+    the report's Kelly) / 'kelly-cont' / 'flat-8'. Growth in ×1e-4/hand with its MC 95% CI; deep-drawdown %
+    with its Wilson CI. Empty frame if no ladder run exists (so a notebook degrades cleanly)."""
+    found = _latest_ladder_record(runs_dir)
+    if not found:
+        return pd.DataFrame()
+    cells = found["record"]["cells"]
+    ddk = "drawdown_breach_0.5"
+    rows = []
+    for regime in ("growth", "ruin"):
+        for bettor, cell_key in (("flat", "flat"), ("kelly", "kelly-disc"),
+                                 ("kelly-cont", "kelly-cont"), ("flat-8", "flat-8")):
+            cell = cells.get(f"{regime}/{cell_key}")
+            if cell is None:
+                continue
+            g, dd = cell["growth_rate"], cell[ddk]
+            rows.append({
+                "regime": regime, "bettor": bettor,
+                "growth_1e4": g["value"] * 1e4, "growth_lo_1e4": g["low"] * 1e4, "growth_hi_1e4": g["high"] * 1e4,
+                "dd_pct": dd["estimate"] * 100, "dd_lo_pct": dd["low"] * 100, "dd_hi_pct": dd["high"] * 100,
+                "ruin_pct": cell["ruin"]["estimate"] * 100, "n_sessions": g["n"], "run": found["run"],
+            })
+    return pd.DataFrame(rows)
+
+
+def ladder_provenance(role: str | None = None, runs_dir: str | Path | None = None) -> str:
+    """Source line for a ladder-baseline figure/table: the committed high-n bet-ladder + its edge reference
+    — honest about being ONE tight measurement (n sessions/cell), not a run count."""
+    found = _latest_ladder_record(runs_dir)
+    if not found:
+        return "source: bet-ladder (not found)"
+    er = (found["record"].get("config") or {}).get("edge_reference", {})
+    body = ("%s-session bet-ladder — discrete-Kelly / Flat on basic play; Kelly sized from the %s-hand "
+            "edge reference (git %s)" % (f"{found['n']:,}", f"{er.get('n_total', 0):,}", er.get("git_hash", "?")))
+    return "source: %s%s" % (("%s · " % role) if role else "", body)
+
+
+def diff_significance(value_a: float, lo_a: float, hi_a: float,
+                      value_b: float, lo_b: float, hi_b: float) -> dict:
+    """Two-sided z-test on ``a − b`` for two **independent** estimates given their 95% CIs (the bettors
+    share no shoes — ``cell_eval`` seeds each cell from a disjoint range — so the difference is unpaired).
+    Recovers each SE from its half-width (95% CI ⇒ ÷1.96); ``SE_diff = hypot(SE_a, SE_b)``. Dependency-light
+    (``math.erfc`` for the p-value). Returns ``{gap, z, p, se_diff}``."""
+    import math
+    se_a, se_b = (hi_a - lo_a) / 2 / 1.96, (hi_b - lo_b) / 2 / 1.96
+    gap, se = value_a - value_b, math.hypot(se_a, se_b)
+    z = gap / se if se else float("inf")
+    return {"gap": gap, "z": z, "p": math.erfc(abs(z) / math.sqrt(2)), "se_diff": se}
+
+
+def kelly_beats_flat(regime: str, runs_dir: str | Path | None = None) -> dict:
+    """The report's headline test on the TIGHT 20k ladder: is discrete-Kelly's growth > Flat's in ``regime``?
+    Independent-sample z-test → ``{regime, kelly_1e4, flat_1e4, gap, z, p, se_diff}``. p<0.05 ⇒ resolved."""
+    b = ladder_baselines(runs_dir)
+    k = b[(b.regime == regime) & (b.bettor == "kelly")].iloc[0]
+    f = b[(b.regime == regime) & (b.bettor == "flat")].iloc[0]
+    out = diff_significance(k.growth_1e4, k.growth_lo_1e4, k.growth_hi_1e4,
+                            f.growth_1e4, f.growth_lo_1e4, f.growth_hi_1e4)
+    return {"regime": regime, "kelly_1e4": k.growth_1e4, "flat_1e4": f.growth_1e4, **out}
+
+
+# --- provenance for the bet frames -----------------------------------------------------------------
+# The play-side ``provenance`` reads a runs frame with ``method``/``encoding`` columns; the bet frames
+# (``load_bet_runs`` / ``load_bet_evals``) carry a different config shape, so they get their own reader.
+
+_BET_FIELDS = ["regime", "train_regime", "gamma", "double", "bankroll_feature", "scale", "lr_sched",
+               "n_sess", "phase"]
+
+
+def _bet_bits(cfg) -> list[str]:
+    """Config (a Series or dict) → ordered human-readable bits — what is *special* about a bet run, not
+    its opaque id. Skips missing fields; normalises the two double flavours (bool / 'on'|'off')."""
+    g = cfg.get
+    bits = ["DQN bettor"]
+    regime = g("regime") if g("regime") in ("growth", "ruin") else g("train_regime")
+    if regime:
+        bits.append(str(regime))
+    if pd.notna(g("gamma")):
+        bits.append("g=%g" % g("gamma"))
+    double = g("double")
+    if double is not None:
+        bits.append("double-DQN" if double in (True, "on") else "single-DQN")
+    if g("bankroll_feature"):
+        bits.append("%s-enc" % g("bankroll_feature"))
+    if pd.notna(g("scale")):
+        bits.append("scale%g" % g("scale"))
+    if g("lr_sched"):
+        bits.append("%s-lr" % g("lr_sched"))
+    if g("phase"):
+        bits.append("%s policy" % g("phase"))
+    return bits
+
+
+def bet_provenance(sel, role: str | None = None) -> str:
+    """A source line for a bet figure/table: WHAT the run(s) are (config via ``_bet_bits``), not just an id.
+    Pass a Series (single run) or a DataFrame (a multi-seed group → shared config + the seed list, naming
+    any fields that vary). Render *below* the artifact via ``show(..., source=bet_provenance(...))`` or
+    ``fignote(bet_provenance(...))`` — the bet-side twin of ``provenance``."""
+    if isinstance(sel, pd.Series) or len(sel) == 1:
+        row = sel if isinstance(sel, pd.Series) else sel.iloc[0]
+        body = "single run — " + " · ".join(_bet_bits(row))
+        if row.get("seed") is not None:
+            body += " · seed %s" % row.get("seed")
+    else:
+        rep, varies = {}, []
+        for f in _BET_FIELDS:
+            if f not in sel:
+                continue
+            uniq = [x for x in sel[f].dropna().unique()]
+            if len(uniq) == 1:
+                rep[f] = uniq[0]
+            elif len(uniq) > 1:
+                varies.append(f)
+        seeds = sorted({s for s in sel.get("seed", pd.Series(dtype=object)).tolist() if s is not None})
+        n_runs = sel["run"].nunique() if "run" in sel else len(sel)   # rows may double per run (final/best-ckpt)
+        # "across N runs" not "mean over N" — the group may feed several per-config means or a table, not one average
+        body = "across %d runs — %s · seeds %s" % (
+            n_runs, " · ".join(_bet_bits(rep)), ", ".join(map(str, seeds)) or "?")
+        if varies:
+            body += " · (varies: %s)" % ", ".join(varies)
+    return "source: %s%s" % (("%s · " % role) if role else "", body)
+
+
+# --- bet-model figures — clean, self-contained plotters (the chapters call these, one line each) --------
+
+_LADDER_COLORS = {"agent": "#d95f02", "kelly": "#1b9e77", "flat": "#7570b3"}
+
+
+def plot_bet_orbit(path: str | Path, note: str | None = None) -> None:
+    """Heatmap of greedy bet level vs true count over training, loss beneath — the 'training orbit'.
+    `note` (e.g. ``bet_provenance(row)``) is rendered as a muted source line under the figure."""
+    import matplotlib.pyplot as plt
+    import numpy as np
+    sessions, loss, bets = bet_trajectory(path)
+    fig, (heat, lo) = plt.subplots(2, 1, figsize=(11, 5.5), sharex=True, gridspec_kw={"height_ratios": [3, 1]})
+    mesh = heat.pcolormesh(sessions, np.arange(len(BET_COUNTS)), bets.T, cmap="viridis", shading="nearest", vmin=1, vmax=8)
+    heat.set_yticks(np.arange(len(BET_COUNTS)))
+    heat.set_yticklabels([f"{c:+d}" for c in BET_COUNTS])
+    heat.set(ylabel="true count", title=f"training orbit — bet vs count  ({Path(path).name[:18]})")
+    fig.colorbar(mesh, ax=heat, label="bet level")
+    lo.plot(sessions, loss, lw=1)
+    lo.set(xlabel="session", ylabel="loss")
+    lo.grid(alpha=0.3)
+    fig.tight_layout()
+    if note:
+        fignote(note)
+    plt.show()
+
+
+def plot_kelly_distance(runs: pd.DataFrame, label=lambda r: f"{'on' if r.double else 'off'}/s{r.seed}",
+                        note: str | None = None) -> None:
+    """L1-distance-to-Kelly over training for each run — dips mark near-Kelly ramps the orbit visits."""
+    import matplotlib.pyplot as plt
+    plt.figure(figsize=(11, 3.6))
+    for _, r in runs.iterrows():
+        sessions, _, bets = bet_trajectory(r.path)
+        plt.plot(sessions, bet_kelly_distance(bets), lw=1.2, label=label(r))
+    plt.axhline(2, ls="--", c="green", alpha=0.6, label="dist<=2 (~Kelly)")
+    plt.gca().set(xlabel="session", ylabel="L1 distance to Kelly",
+                  title="the orbit visits near-Kelly ramps (dips) but never settles")
+    plt.legend(fontsize=8)
+    plt.grid(alpha=0.3)
+    if note:
+        fignote(note)
+    plt.show()
+
+
+def plot_ladder_bars(evals: pd.DataFrame, metric: str, agent_cfg: dict, title: str | None = None,
+                     phase: str = "final", note: str | None = None) -> None:
+    """Agent vs Kelly vs Flat bars for `metric`, grouped by regime (native cell). The **agent** bar is the
+    2000-sess eval mean, with the **individual seeds drawn as dots** (honest at small n — a symmetric SD
+    whisker there is ~the 95% CI and dwarfs the bar); **Kelly/Flat** are the tight 20k-ladder baselines
+    (bar = value ± the eval's own 95% CI). `agent_cfg` picks the headline agent config per regime. `phase`
+    selects the agent policy — 'final' (deployed) or 'best-ckpt' (H3 diagnostic). Baselines are phase-invariant."""
+    import matplotlib.pyplot as plt
+    import numpy as np
+    fin = evals[(evals.phase == phase) & (evals.regime == evals.train_regime)]
+    base = ladder_baselines()
+    ci_cols = {"growth_1e4": ("growth_lo_1e4", "growth_hi_1e4"), "dd_pct": ("dd_lo_pct", "dd_hi_pct")}
+    lo_col, hi_col = ci_cols.get(metric, (None, None))
+    plt.figure(figsize=(7.5, 4))
+    for i, regime in enumerate(("growth", "ruin")):
+        agent = fin[(fin.train_regime == regime) & (fin.bettor == "agent")]
+        for key, val in agent_cfg.get(regime, {}).items():
+            agent = agent[agent[key] == val]
+        # agent = mean bar + the individual seeds as dots. At n~6 a symmetric SD whisker is ~the 95% CI and
+        # would dwarf the bar (and hide the real spread, which for best-ckpt IS the finding) — so show the
+        # raw points instead. Baselines (below) keep their deterministic MC CI, a different uncertainty type.
+        vals = agent[metric].to_numpy()
+        plt.bar(i * 4, vals.mean() if len(vals) else 0, color=_LADDER_COLORS["agent"], alpha=0.5)
+        if len(vals):
+            plt.scatter(i * 4 + np.linspace(-0.24, 0.24, len(vals)), vals, s=15,
+                        color=_LADDER_COLORS["agent"], edgecolor="black", linewidth=0.4, zorder=3)
+        for j, bettor in enumerate(("kelly", "flat"), start=1):
+            row = base[(base.regime == regime) & (base.bettor == bettor)]
+            if row.empty:
+                continue
+            row = row.iloc[0]
+            yerr = (row[hi_col] - row[lo_col]) / 2 if lo_col else 0
+            plt.bar(i * 4 + j, row[metric], yerr=yerr, capsize=4, color=_LADDER_COLORS[bettor], alpha=0.85)
+    plt.xticks([i * 4 + j for i in (0, 1) for j in range(3)], ["agent", "kelly", "flat"] * 2)
+    plt.gca().set(title=title or metric)
+    plt.gca().text(1, 1.0, "GROWTH", transform=plt.gca().get_xaxis_transform(), ha="center", fontsize=9, color="grey")
+    plt.gca().text(5, 1.0, "RUIN", transform=plt.gca().get_xaxis_transform(), ha="center", fontsize=9, color="grey")
+    plt.grid(alpha=0.3, axis="y")
+    if note:
+        fignote(note)
+    plt.show()
+
+
+def plot_signal_vs_noise(signal: float, noise_sd: float, unit: str = "per-hand reward",
+                         signal_label: str = "edge", note: str | None = None) -> None:
+    """Schematic (NOT fitted data): the per-hand outcome distribution, mean shifted by `signal` against
+    spread `noise_sd`. Two near-identical gaussians — the point is they overlap almost perfectly, so the
+    edge a value-learner must estimate is buried in per-hand noise (huge samples to resolve). Feed sourced
+    numbers (e.g. per-hand reward SD ~1.15, basic edge ~0.0054/hand) and label the figure a schematic."""
+    import matplotlib.pyplot as plt
+    import numpy as np
+    x = np.linspace(-3.2 * noise_sd, 3.2 * noise_sd, 500)
+
+    def bell(mu):
+        return np.exp(-0.5 * ((x - mu) / noise_sd) ** 2)
+
+    plt.figure(figsize=(7.5, 3.8))
+    plt.plot(x, bell(0.0), color=_LADDER_COLORS["flat"], label="no edge (mean 0)")
+    plt.plot(x, bell(signal), color=_LADDER_COLORS["kelly"], ls="--",
+             label="with %s (mean +%.2g)" % (signal_label, signal))
+    plt.axvline(0.0, color=_LADDER_COLORS["flat"], lw=0.6, alpha=0.5)
+    plt.axvline(signal, color=_LADDER_COLORS["kelly"], lw=0.6, alpha=0.5)
+    plt.gca().set(xlabel=unit, yticks=[],
+                  title="schematic: the %s is sub-noise — shift %.2g vs SD %.2g  (%.2g of one SD)"
+                        % (signal_label, signal, noise_sd, signal / noise_sd))
+    plt.legend(fontsize=8)
+    plt.grid(alpha=0.3)
+    if note:
+        fignote(note)
+    plt.show()
+
+
+def plot_prize_bar(regime: str = "growth", note: str | None = None) -> None:
+    """Kelly vs Flat growth in one regime from the TIGHT 20k ladder, with the *prize* (the gap Kelly buys
+    over Flat) annotated and both 95% CIs drawn. Chapter 3's opening number. Both bars are typically **below
+    zero** — even optimal Kelly is net-negative here (the table-min tax); it merely loses *less* than Flat."""
+    import matplotlib.pyplot as plt
+    b = ladder_baselines()
+    b = b[b.regime == regime]
+    k, f = b[b.bettor == "kelly"].iloc[0], b[b.bettor == "flat"].iloc[0]
+    kelly, flat = float(k.growth_1e4), float(f.growth_1e4)
+    k_err, f_err = (k.growth_hi_1e4 - k.growth_lo_1e4) / 2, (f.growth_hi_1e4 - f.growth_lo_1e4) / 2
+    fig, ax = plt.subplots(figsize=(5, 4))
+    ax.bar([0, 1], [flat, kelly], yerr=[f_err, k_err], capsize=5,
+           color=[_LADDER_COLORS["flat"], _LADDER_COLORS["kelly"]], alpha=0.85)
+    ax.set_xticks([0, 1])
+    ax.set_xticklabels(["Flat", "Kelly"])
+    ax.axhline(0, color="grey", lw=0.8)
+    ax.annotate("", xy=(1, kelly), xytext=(1, flat),
+                arrowprops=dict(arrowstyle="<->", color="black", lw=1.5))
+    ax.text(1.08, (kelly + flat) / 2, "prize\n%.2fe-4/hand" % (kelly - flat), va="center", fontsize=9)
+    ax.set(ylabel="growth rate (x1e-4/hand)", title="the entire prize Kelly buys over Flat (%s)" % regime)
+    ax.grid(alpha=0.3, axis="y")
+    plt.tight_layout()
+    if note:
+        fignote(note)
+    plt.show()
+
+
+def plot_native_curves(runs: pd.DataFrame, title: str | None = None, label=None,
+                       note: str | None = None) -> None:
+    """Greedy bet-vs-count at each run's NATIVE bankroll — the honest policy probe (mostly flat), with the
+    Kelly ladder dashed for reference. `label` maps a run row → a legend string."""
+    import matplotlib.pyplot as plt
+    label = label or (lambda r: f"s{r.seed}/{r.bankroll_feature}")
+    plt.figure(figsize=(8, 4.2))
+    for _, r in runs.iterrows():
+        curve = bet_native_curve(r.path)
+        counts = sorted(curve)
+        plt.plot(counts, [curve[c] for c in counts], marker="o", lw=1.3, alpha=0.75, label=label(r))
+    plt.plot(BET_COUNTS, [KELLY_LADDER[c] for c in BET_COUNTS], "k--", lw=1.6, label="Kelly ladder")
+    plt.gca().set(xlabel="true count", ylabel="bet level", ylim=(0, 8.5),
+                  title=title or "native bet-vs-count — mostly flat, never the ramp")
+    plt.legend(fontsize=7, ncol=2)
+    plt.grid(alpha=0.3)
+    if note:
+        fignote(note)
+    plt.show()
+
+
+def plot_bet_replication(regime: str = "growth", feature: str = "raw", bankrolls=(400, 100),
+                         counts=tuple(BET_COUNTS), note: str | None = None) -> None:
+    """Bet-vs-count for EVERY seed of a config, at each bankroll, discrete-Kelly dashed per panel — the
+    falsification of the embedding's 'the bet tracks count' read. If that structure were a real property of
+    the policy the seeds would agree; instead it is **seed-specific noise** (native: flat / coarse gate /
+    erratic; OOD-low: some seeds rise with count, some fall, some saturate), so no wealth-vs-count read
+    survives replication. This is why the embedding is suggestive, not decisive."""
+    import matplotlib.pyplot as plt
+    from blackjack_rl.session.bet_agent import KellyBet, greedy_bet_curve
+    from blackjack_rl.session.persistence import load_bet_agent
+    from blackjack_rl.session.references import load_edge_reference
+    kb = KellyBet(load_edge_reference().kelly_curve, discretize=True)
+    sel = load_bet_runs()
+    sel = sel[(sel.regime == regime) & (sel.bankroll_feature == feature)]
+    agents = {int(s): load_bet_agent(g.iloc[-1].path) for s, g in sel.groupby("seed")}
+    fig, axes = plt.subplots(1, len(bankrolls), figsize=(5.5 * len(bankrolls), 4), sharey=True)
+    axes = list(axes) if len(bankrolls) > 1 else [axes]
+    for ax, W in zip(axes, bankrolls):
+        for s, ag in sorted(agents.items()):
+            cur = greedy_bet_curve(ag, counts, bankroll=float(W), decks_remaining=3.0)
+            ax.plot(counts, [cur[c] for c in counts], marker="o", lw=1.2, alpha=0.7, label=f"seed {s}")
+        ax.plot(counts, [kb.bet(true_count=float(c), decks_remaining=3.0, bankroll=float(W)) for c in counts],
+                "k--", lw=1.6, label="Kelly")
+        ax.set(xlabel="true count", ylim=(0, 8.5),
+               title=f"bankroll {W}u{' (native)' if W >= 400 else ' (out-of-distribution)'}")
+        ax.grid(alpha=0.3)
+    axes[0].set(ylabel="bet level")
+    axes[0].legend(fontsize=7, ncol=2)
+    fig.suptitle("the embedding's bet-structure doesn't replicate — every seed bets differently")
+    fig.tight_layout()
+    if note:
+        fignote(note)
+    plt.show()
+
+
+def plot_encoding_ablation(evals: pd.DataFrame, metric: str = "growth_1e4", title: str | None = None,
+                           note: str | None = None) -> None:
+    """Growth by bankroll encoding (raw / logratio / none) in the growth regime, Kelly & Flat dashed — the
+    controlled test of the wealth hypothesis. All three bars ≈ Flat ⇒ encoding-invariant (falsified)."""
+    import matplotlib.pyplot as plt
+    fin = evals[(evals.phase == "final") & (evals.train_regime == "growth") & (evals.regime == "growth")]
+    agent = fin[fin.bettor == "agent"]
+    import numpy as np
+    order = [e for e in ("raw", "logratio", "none") if (agent["bankroll_feature"] == e).any()]
+    plt.figure(figsize=(6.5, 4))
+    for i, enc in enumerate(order):
+        vals = agent[agent["bankroll_feature"] == enc][metric].to_numpy()   # per-seed values
+        plt.bar(i, vals.mean() if len(vals) else 0, color=_LADDER_COLORS["agent"], alpha=0.5)
+        if len(vals):                                                        # dots, not a bar-dwarfing whisker
+            plt.scatter(i + np.linspace(-0.22, 0.22, len(vals)), vals, s=15,
+                        color=_LADDER_COLORS["agent"], edgecolor="black", linewidth=0.4, zorder=3)
+    bg = ladder_baselines()  # tight 20k baselines, not the noisy 2k cached ones
+    bg = bg[bg.regime == "growth"]
+    plt.axhline(float(bg.loc[bg.bettor == "flat", metric].iloc[0]), ls="--", color=_LADDER_COLORS["flat"], label="Flat (20k)")
+    plt.axhline(float(bg.loc[bg.bettor == "kelly", metric].iloc[0]), ls="--", color=_LADDER_COLORS["kelly"], label="Kelly (20k)")
+    plt.xticks(range(len(order)), order)
+    plt.gca().set(xlabel="bankroll encoding", ylabel=metric,
+                  title=title or "encoding ablation — remove wealth, nothing changes (all ~ Flat)")
+    plt.legend()
+    plt.grid(alpha=0.3, axis="y")
+    if note:
+        fignote(note)
+    plt.show()
+
+
+# --- learned-representation probe (Ch4) — penultimate-layer embedding of a state grid -----------------
+# Promoted from the scratch investigation notebook: the net's internal representation, projected to 2-D and
+# coloured by bet / count / bankroll. Clusters by count ⇒ learned the edge; by bankroll ⇒ keyed on wealth.
+
+def bet_embedding(path: str | Path, counts=range(-8, 11), depths=(1.0, 2.0, 3.0, 4.5, 6.0),
+                  bankrolls=(50, 100, 150, 200, 300, 400, 500, 600)):
+    """Penultimate-layer embedding (post final ReLU) of a grid of (count, depth, bankroll) states for one
+    agent, plus its greedy bet at each. Returns (states_df, embedding[n, hidden], bet[n]). NOTE the
+    bankroll grid is deliberately WIDE (50–600u) — an OOD sweep; the agents live at ~400u (see Ch4)."""
+    import numpy as np
+    import torch
+    from blackjack_rl.session.persistence import load_bet_agent
+    agent = load_bet_agent(path)
+    states = pd.DataFrame([{"true_count": tc, "decks_remaining": d, "bankroll": b}
+                           for tc in counts for d in depths for b in bankrolls])
+    feats = torch.tensor([agent.encode_state(tc, d, b) for tc, d, b in
+                          zip(states["true_count"], states["decks_remaining"], states["bankroll"])],
+                         dtype=torch.float32)
+    with torch.no_grad():
+        embedding = agent.q_net.features(feats).numpy()
+        bet = np.array(agent.levels)[agent.q_net(feats).argmax(1).numpy()]
+    return states, embedding, bet
+
+
+def bet_project(embedding, method: str = "pca", seed: int = 0):
+    """2-D projection of an embedding: 'pca' (linear, fast) or 'tsne' (local structure)."""
+    from sklearn.decomposition import PCA
+    from sklearn.manifold import TSNE
+    if method == "pca":
+        return PCA(n_components=2, random_state=seed).fit_transform(embedding)
+    return TSNE(n_components=2, init="pca", random_state=seed,
+                perplexity=min(30, len(embedding) - 1)).fit_transform(embedding)
+
+
+def plot_bet_embedding(coords, color, label: str, title: str, cmap: str = "viridis",
+                       note: str | None = None) -> None:
+    """One 2-D embedding scatter, coloured by `color` (bet / count / bankroll)."""
+    import matplotlib.pyplot as plt
+    plt.figure(figsize=(5.5, 4.5))
+    pts = plt.scatter(coords[:, 0], coords[:, 1], c=color, cmap=cmap, s=10, alpha=0.7)
+    plt.colorbar(pts, label=label)
+    plt.gca().set(xticks=[], yticks=[], title=title)
+    plt.tight_layout()
+    if note:
+        fignote(note)
+    plt.show()
