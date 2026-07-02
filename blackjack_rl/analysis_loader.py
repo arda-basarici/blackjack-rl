@@ -736,9 +736,10 @@ def plot_ladder_bars(evals: pd.DataFrame, metric: str, agent_cfg: dict, title: s
             yerr = (row[hi_col] - row[lo_col]) / 2 if lo_col else 0
             plt.bar(i * 4 + j, row[metric], yerr=yerr, capsize=4, color=_LADDER_COLORS[bettor], alpha=0.85)
     plt.xticks([i * 4 + j for i in (0, 1) for j in range(3)], ["agent", "kelly", "flat"] * 2)
-    plt.gca().set(title=title or metric)
-    plt.gca().text(1, 1.0, "GROWTH", transform=plt.gca().get_xaxis_transform(), ha="center", fontsize=9, color="grey")
-    plt.gca().text(5, 1.0, "RUIN", transform=plt.gca().get_xaxis_transform(), ha="center", fontsize=9, color="grey")
+    # group labels sit just above the axes; the title needs extra pad so they don't collide with it
+    plt.gca().set_title(title or metric, pad=18)
+    plt.gca().text(1, 1.01, "GROWTH", transform=plt.gca().get_xaxis_transform(), ha="center", va="bottom", fontsize=9, color="grey")
+    plt.gca().text(5, 1.01, "RUIN", transform=plt.gca().get_xaxis_transform(), ha="center", va="bottom", fontsize=9, color="grey")
     plt.grid(alpha=0.3, axis="y")
     if note:
         fignote(note)
