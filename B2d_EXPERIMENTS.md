@@ -583,9 +583,11 @@ artifacts); each run id carries its own provenance (timestamp + git hash).
 
 **Status:** the headline is **CI-backed AND multi-seed hardened** (Test 13) — RL ≈ flat, the visited ramps
 are far worse than flat, structured Kelly is the only winner; one single-seed claim (double-ON safety)
-honestly revised; ruin-γ characterized. **The core investigation is complete.** **Next:** the *representational*
-lever — the wealth-vs-edge diagnosis (embedding) → the `W_current/W_start` encoding experiment (a **design**
-call, not a rescale — see REPORT_NOTES_B "wealth-scaling without edge-gating"), then report framing.
+honestly revised; ruin-γ characterized. **The core investigation is complete.** The *representational* lever
+was then investigated and closed — **Test 14** (encoding ablation) + **Test 15** (bankroll-coverage) both
+falsify the wealth hypothesis; nothing wealth-shaped is load-bearing. **Next:** the **report** (consolidate
+Ch1–5 → PDF; picks up the Session-14 deferred P2 polish). Optional before writing: the *count*-coverage analog
+(Test 15's sibling) to directly test the count-**rarity** factor.
 
 ---
 

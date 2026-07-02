@@ -60,6 +60,18 @@ def test_bankroll_is_continuous_across_hands():
     assert cap.final_bankroll == cap.hands[-1].bankroll_after
 
 
+def test_run_starting_bankroll_override():
+    """``run(starting_bankroll=)`` overrides the config start for one session (the D14 bankroll-coverage
+    seam — the single session-generation point the sweep drives); omitting it keeps the config default."""
+    random.seed(6)
+    env = SessionEnv(growth_config())  # config default 400u
+    over = env.run(BasicStrategy(), FlatBet(1.0), starting_bankroll=150.0)
+    assert over.starting_bankroll == 150.0
+    assert over.hands[0].bankroll_before == 150.0        # the override is what the first hand sees
+    default = env.run(BasicStrategy(), FlatBet(1.0))
+    assert default.starting_bankroll == 400.0            # unchanged when not overridden
+
+
 def test_horizon_terminates_without_ruin():
     # huge bankroll, tiny flat bet -> cannot ruin; ends exactly at the horizon
     random.seed(2)

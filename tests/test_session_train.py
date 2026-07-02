@@ -4,6 +4,7 @@ A smoke trainer, not a skill test (cf. A5's honest boundary): the runs are tiny,
 *mechanics* — reproducibility from the seed, a sane learning curve, and that the optimizer actually
 moved the weights — not that the agent learned to bet well (that's B2d-3's measured comparison).
 """
+import dataclasses
 import math
 
 import pytest
@@ -62,3 +63,23 @@ def test_train_bet_emits_learning_curve():
     assert last["grad_steps"] > 0  # crossed warm-up
     assert last["recent_loss"] is not None and math.isfinite(last["recent_loss"])
     assert set(last["bet_by_count"]) == set(_PROBE_COUNTS)  # the probe curve spans the count range
+
+
+def test_bet_train_config_rejects_bad_bankroll_starts():
+    """The D14 coverage sweep must be non-empty, and every start must clear the ruin threshold (a session
+    can't begin already ruined)."""
+    with pytest.raises(ValueError):
+        BetTrainConfig(bankroll_starts=())                 # empty when set
+    with pytest.raises(ValueError):
+        BetTrainConfig(bankroll_starts=(1.0, 200.0))       # 1.0 <= default ruin_threshold (1.0)
+    BetTrainConfig(bankroll_starts=(100.0, 200.0, 300.0))  # a valid sweep constructs fine
+
+
+def test_train_bet_with_bankroll_starts_runs_and_is_reproducible():
+    """The bankroll-coverage path (cycling the session start over the sweep, D14) trains end-to-end and
+    stays reproducible from the seed — the mechanic, not the skill."""
+    starts = (100.0, 200.0, 300.0, 400.0)
+    agent = train_bet(dataclasses.replace(_tiny_config(seed=3), bankroll_starts=starts))
+    assert isinstance(agent, BetAgent)
+    cfg4 = dataclasses.replace(_tiny_config(seed=4), bankroll_starts=starts)
+    assert _params_equal(train_bet(cfg4), train_bet(cfg4))
