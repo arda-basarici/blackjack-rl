@@ -1,6 +1,6 @@
-"""Reconstructed ground-truth references for Problem B (DESIGN D17, build stage B1).
+"""Reconstructed ground-truth references for Problem B (DESIGN D17; ARCHITECTURE A15).
 
-B has "no clean table" (§3), but we still audit against reconstructed truth:
+Problem B has no clean table to diff against, but reconstructed truth still supports an audit:
 - ``edge_by_count``   — empirical player edge vs Hi-Lo true count (basic strategy, many hands),
 - ``kelly_bet_curve`` — the analytic full-Kelly bet fraction implied by edge-by-count,
 - ``index_plays``     — the known count-deviation index plays, to audit learned deviations.
@@ -45,7 +45,8 @@ class CountEdge:
 @dataclass
 class CountAccumulator:
     """Per-bucket Welford moments ``[n, mean, M2]`` keyed by integer Hi-Lo true count — the shared
-    accumulation primitive behind ``edge_by_count`` (single stream) and its parallel runner (B2a).
+    accumulation primitive behind ``edge_by_count`` (single stream) and the parallel runner
+    (``scripts/measure_edge_by_count.py``).
 
     Holds *raw* running moments, not finalized ``CountEdge``s, for two reasons: (1) partials from
     independent workers combine **losslessly** via ``merge`` (Chan's parallel variance), which needs
@@ -115,7 +116,7 @@ class CountAccumulator:
     @property
     def pooled_mean(self) -> float:
         """Frequency-weighted mean per-unit return over *all* buckets (incl. ``n < 2``) — the exact
-        flat-bet edge across every hand seen, the anchor-check quantity (B2a)."""
+        flat-bet edge across every hand seen — the parallel runner's anchor-check quantity."""
         total = sum(m[0] for m in self.buckets.values())
         return sum(m[0] * m[1] for m in self.buckets.values()) / total if total else 0.0
 
@@ -159,11 +160,12 @@ def accumulate_edges(
 def edge_by_count(
     *, n_hands: int, seed: int = 0, max_hands_per_session: int = 1000
 ) -> dict[int, CountEdge]:
-    """Empirically measure player edge as a function of Hi-Lo true count (DESIGN D17, B1).
+    """Empirically measure player edge as a function of Hi-Lo true count (DESIGN D17).
 
     A thin single-stream finalize over ``accumulate_edges``: returns one ``CountEdge`` per bucket
     that saw >= 2 hands (variance needs two), keyed and ordered by integer true count. The high-n
-    parallel measurement (B2a) reuses ``accumulate_edges`` per worker and merges before finalizing.
+    parallel measurement (``scripts/measure_edge_by_count.py``) reuses ``accumulate_edges`` per
+    worker and merges before finalizing.
     """
     return accumulate_edges(
         n_hands=n_hands, seed=seed, max_hands_per_session=max_hands_per_session
@@ -171,12 +173,12 @@ def edge_by_count(
 
 
 def kelly_bet_curve(edges: dict[int, CountEdge]) -> dict[int, float]:
-    """Full-Kelly bet fraction implied by an ``edge_by_count`` measurement (DESIGN D17, B1).
+    """Full-Kelly bet fraction implied by an ``edge_by_count`` measurement (DESIGN D17).
 
     For each count bucket the Kelly fraction of bankroll to wager is ``mean_return / variance`` (the
     mean-over-variance optimum for log-growth), floored at 0 — at a non-positive edge Kelly says do
-    not bet. This is the *continuous, unbounded* reference curve: B2 discretizes it into the bet
-    spread (D15) and real play caps it (fractional Kelly / table max). Keyed and ordered by true count.
+    not bet. This is the *continuous, unbounded* reference curve: the bet model discretizes it into
+    the bet spread (D15) and real play caps it (fractional Kelly / table max). Keyed and ordered by true count.
     """
     curve: dict[int, float] = {}
     for true_count in sorted(edges):
@@ -189,7 +191,7 @@ def kelly_bet_curve(edges: dict[int, CountEdge]) -> dict[int, float]:
 @dataclass(frozen=True)
 class EdgeReference:
     """The committed edge-by-count reference: per-count measured ``edges`` + the implied full-Kelly
-    ``kelly_curve``, plus the ``provenance`` of the run that produced them (DESIGN D17, B2c).
+    ``kelly_curve``, plus the ``provenance`` of the run that produced them (DESIGN D17; ARCHITECTURE A15).
 
     This is the **single canonical source** the Problem-B Kelly baseline (``KellyBet``) sizes from and
     the signature figure plots — frozen and committed (``core.paths.EDGE_REFERENCE_PATH``) rather than
@@ -203,7 +205,7 @@ class EdgeReference:
 
 
 def load_edge_reference(path: Path | str = EDGE_REFERENCE_PATH) -> EdgeReference:
-    """Load the committed edge-by-count reference JSON (DESIGN D17, B2c).
+    """Load the committed edge-by-count reference JSON (DESIGN D17).
 
     Reconstructs the int-keyed ``edges`` and ``kelly_curve`` (the JSON keys them by string) and keeps
     the provenance fields (run id / timestamp / git hash / config / anchor check) so any run that uses
@@ -260,8 +262,9 @@ class IndexPlayTable:
       takes precedence *when surrender is available*; otherwise the playing deviation (stand at
       TC >= +4) applies.
     - Exact indices and the ``>=`` vs ``>`` boundary vary slightly by source and rule set (S17/H17,
-      DAS). B3 audits learned deviations against this table and should cross-check ``action_below``
-      against the engine's actual ``BasicStrategy`` for the live config.
+      DAS). A count-aware play model would audit its learned deviations against this table (that
+      model was cut from scope — see DESIGN, *Scope cut & future work*); any such use should
+      cross-check ``action_below`` against the engine's actual ``BasicStrategy`` for the live config.
     """
 
     playing: tuple[IndexPlay, ...]
@@ -269,8 +272,9 @@ class IndexPlayTable:
 
 
 def index_plays() -> IndexPlayTable:
-    """The known Hi-Lo index plays — the play-side reference B3 audits learned deviations against
-    (DESIGN D17, B1). Literature-sourced; see ``IndexPlayTable`` for caveats and semantics."""
+    """The known Hi-Lo index plays — the play-side reference, retained for a future count-aware
+    play model (DESIGN D17; the play head was cut from scope). Literature-sourced; see
+    ``IndexPlayTable`` for caveats and semantics."""
     playing = (
         IndexPlay("16 v 10", 16, False, 10, 0.0, "hit", "stand"),
         IndexPlay("15 v 10", 15, False, 10, 4.0, "hit", "stand"),

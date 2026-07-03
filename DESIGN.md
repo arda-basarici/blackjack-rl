@@ -1,385 +1,309 @@
-# Blackjack RL — Design Document
+# DESIGN — Blackjack RL
 
-> **Status:** living · A complete (tabular + DQN, reported), B designed · **Phase:** 3 (PyTorch & Deep Learning) ·
-> **Last updated:** 2026-06-26
->
-> This document is written _before_ the code, on purpose. It is the design we agreed
-> on, the reasoning behind each choice, and the staged plan we'll build against. Like
-> the roadmap, it is a **working default, not a contract** — revise it when a decision
-> stops fitting, but don't relitigate the whole thing each session. The decisions log
-> (§5) is the part most likely to grow; treat it as living.
+What was built and why — the decisions and their reasoning, kept as a clean snapshot of the
+design as it stands. Edited in place, not appended to; the chronological journey lives in the
+session log and the three reports. How the code is structured → [ARCHITECTURE.md](ARCHITECTURE.md);
+the front door → [README.md](README.md).
+
+*Snapshot of the completed project · last updated 2026-07-03.*
 
 ---
 
-## 1. Purpose & framing
+## Objective
 
-A reinforcement-learning agent learns to play blackjack from nothing but the outcome of
-each hand, and we check what it learned against a strategy we have already proven optimal.
+Can a reinforcement-learning agent, given nothing but the outcome of play, rediscover decisions
+that can already be proven or derived — and where it cannot, can the failure be explained
+precisely?
 
-Be honest about what this is up front: **a tabular RL agent for blackjack is a textbook
-exercise** — it is close to the canonical Sutton & Barto example. So the value of this
-project cannot be "I built an RL agent." The value has to live in the **audit, the rigor,
-and the thread** — what we measure, what we refuse to claim, and how it connects to the
-work around it. Three goals, in priority order:
+The project asks that question three times, removing a rung of ground truth each time:
 
-- **Learning (why I'm building it):** RL literacy, and specifically _credit assignment_ —
-  how a single terminal reward (win / loss at the end of a hand) gets propagated back to
-  the several in-hand decisions that led to it. Monte Carlo control is the cleanest first
-  answer to that problem, and blackjack is an ideal first domain because the dynamics are
-  already understood.
-- **Portfolio (why it earns a place):** the **honesty thread**. Given only win/loss
-  rewards, does an agent _rediscover_ the proven-optimal basic-strategy table — and
-  precisely where, and why, does it disagree? Most toy RL projects never make that
-  comparison because they have no ground truth. We do.
-- **Thread (why it's not a one-off):** this is the P3 link in the blackjack spine.
-  P2 _computed_ the optimum and analyzed the odds; here an agent _learns_ which move is
-  optimal; the planned P4 coach will _explain why_ a move is optimal, using an LLM. This
-  agent produces the "which"; P4 supplies the "why."
+| | Learns | Ground truth | The question | Report |
+|---|---|---|---|---|
+| **1** | per-hand play, by lookup table | exact — the proven-optimal table | rediscoverable from outcomes alone? | [the policy audit](blackjack-rl-policy-audit.pdf) |
+| **2** | per-hand play, by neural network | exact — the same table | what does approximation cost? | [from table to network](from-table-to-network.pdf) |
+| **3** | bet sizing over a counted shoe | reconstructed — measured edge curve → Kelly | does learning work below the noise? | [betting against the noise](betting-against-the-noise.pdf) |
 
-## 2. Relationship to prior work (what we reuse, and don't rebuild)
+Blackjack RL with a tabular agent is a textbook exercise — stated up front. The value is
+therefore not the agent; it is the **audit**: every run graded against a reference on identical
+terms, every disagreement attributed to a named cause. The success criterion is that **the audit
+closes**: each gap between the learned policy and the reference is explained as one of
+*insufficient experience*, *representation limits*, *a statistical near-tie*, or *a signal below
+the noise* — with the experiment that earned the attribution, not a hand-wave.
 
-This project sits on top of the Phase 2 `blackjack-sim`, whose engine was audited and its
-data regenerated (seed 42) at the Phase 2→3 boundary. We lean on three things it already
-provides and **do not rebuild any of them**:
+The findings live in the three frozen reports linked above, one per phase; this document holds
+the decisions behind them.
 
-- **A validated environment.** The engine's numbers are in-band and reproducible:
-  Basic-strategy house edge **0.45%** (6-deck, S17, 3:2), dealer bust ~26.8%, blackjack
-  ~4.5%. That 0.45% is the **anchor** every trained agent is measured against.
-- **A ground-truth policy.** The derived optimal basic-strategy table is the reference the
-  learned policy is diffed against, cell by cell.
-- **A clean policy contract.** `strategies/base.py` defines `Strategy.decide(state) -> action`,
-  and `GameState` is an immutable snapshot of exactly what a player may see. Crucially,
-  `GameState` _already carries_ counting and session fields (`true_count`,
-  `decks_remaining`, `bankroll`, `current_bet`) — populated only when counting is enabled.
-  So a trained agent, wrapped as a `Strategy`, plugs straight into the existing engine and
-  is measured by the **same** metrics as basic strategy, with **zero engine changes**.
-  This is the single most important reuse decision: the comparison between _any_ two
-  policies happens at the evaluation layer, on identical terms.
+---
 
-There is also existing **per-decision log data** (`data/runs/hands_*`) generated by
-several fixed behavior policies — `hands_basic`, `hands_random`, `hands_semi_random`,
-`hands_dealer_mirror`. These are not used to _train_ the online agent; they are the raw
-material for the offline-learning coverage study (§5, D5).
+## The instrument
 
-## 3. Problem decomposition: A and B
+Everything runs on the blackjack engine built and validated in the preceding simulator project
+(six decks, dealer stands soft 17, 3:2 blackjack). Its measured basic-strategy house edge of
+**≈ 0.45%** is the anchor every agent in every phase is graded against, and its derived
+basic-strategy table is the per-hand ground truth.
 
-The project splits into two problems with a hard line between them. They are built and
-written up **sequentially, not in parallel** — A complete and committed first, then B,
-then a joint analysis that places both (and the Phase 2 fixed strategies) side by side.
+**The engine's `Strategy` contract is reused for all evaluation, and the engine is never
+modified** (**D2**). Every trained policy — lookup table or network, player or bettor — is
+wrapped as a `Strategy` and played through the unmodified engine, graded by the same harness on
+the same metrics. Two policies are comparable *by construction*, because model internals never
+touch the evaluation; and every result inherits the engine's validation rather than re-earning
+it.
 
-**Problem A — per-round play.** Learn how to play a _single hand_: hit / stand / double /
-split / surrender against the dealer's upcard. **No counting** — counting only has value
-_across_ hands as the deck depletes, and within one round there is nothing to count, so
-its absence here is structural, not an omission. A has a **clean, proven ground truth**
-(the basic-strategy table), which makes it fully auditable cell by cell. A is a complete,
-defensible project on its own.
+The alternative — a purpose-built RL environment — would have turned every comparison
+against the simulator project's numbers into an apples-to-oranges argument.
 
-**Problem B — counting & betting.** The deliberate extension: the agent now also tracks
-the count and decides _how much to bet_ across hands. The state grows (`true_count`,
-`decks_remaining`). The defining difference, already established in the Phase 2 report
-(§7–8): **there is no clean table to diff against.** The optimum becomes a two-dial
-tradeoff between expected value and risk of ruin, and the reward we optimize _encodes a
-risk preference we chose_. So B's evaluation is necessarily fuzzier. The mature part of B
-is **knowing exactly where the clean ground truth ends** and saying so.
+The engine is **consumed as an installed package, not vendored** (**D10**): an editable install
+from the sibling project, whose only change was packaging metadata. One source of truth, no copy
+to drift; the accepted cost is that this project requires its sibling checked out beside it.
 
-One-line distinction: **A is "play the hand right," with a known correct answer; B is
-"manage the bankroll across hands," where the right answer depends on a risk preference
-and there is no single correct table.**
+---
 
-## 4. RL formulation (the MDP)
+## The shape of the problem
 
-For readers new to RL: an _agent_ observes a _state_, takes an _action_, receives a
-_reward_, and the environment moves to a new state; the goal is a _policy_ (state → action)
-that maximizes total reward. The blackjack mapping for **Problem A**:
+Blackjack contains two learning problems, split by where ground truth ends.
 
-| Element | In blackjack (Problem A)                                                                                                        |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| State   | `(player_value, player_is_soft, dealer_upcard)` plus the legal-action flags                                                     |
-| Action  | `hit` / `stand` / `double` / `split` / `surrender` (the legal subset)                                                           |
-| Reward  | hand outcome on settlement: +1 win, +1.5 blackjack, −1 loss, 0 push; **0 on intermediate steps** (reward is delayed to the end) |
-| Episode | one hand, deal to settlement; terminal when the hand resolves                                                                   |
-| Policy  | the strategy itself — and basic strategy _is_ the optimal policy we're checking against                                         |
+**Problem A — playing the hand.** Hit, stand, double, split against the dealer's upcard, one
+hand at a time. Counting is structurally absent — within a single hand there is nothing to
+count — and a proven-optimal table exists, so the problem is fully auditable. Phases 1 and 2
+both live here.
 
-**The Markov note.** An MDP assumes the future depends only on the current state, not the
-history. Plain blackjack (no counting) is cleanly Markov: player total + soft flag +
-dealer upcard is all that matters, so **Problem A is a clean MDP**. Counting breaks this —
-deck composition now matters and isn't in the naive state. B restores the Markov property
-by _folding the count and decks-remaining into the state_; if it didn't, B would become a
-partially-observed problem. Stating this explicitly is part of B's honesty (most toy
-projects ignore it).
+**Problem B — counting and betting.** Across hands, the depleting shoe makes the deck
+composition informative: the agent tracks the count and sizes its bet. Here there is **no
+correct table to diff against** — the optimum is a tradeoff between growth and risk of ruin,
+so any objective encodes a chosen risk preference. The mature part of the design is knowing
+exactly where clean ground truth ends and saying so. Phase 3 lives here.
 
-## 5. Design decisions (the log)
+The two problems were **built sequentially, never in parallel** (**D3**) — the per-hand work
+complete and reported before betting began — so that Problem B's irreducible fuzziness could
+never contaminate Problem A's clean audit, and each phase closed as a defensible artifact on
+its own.
 
-Numbered so we can reference them elsewhere and append as we go. Same convention as the
-Phase 2 `ARCHITECTURE.md` files.
+Formally, each hand is a Markov decision process: the state is what the player may see, the
+reward is the settled outcome (+1 win, +1.5 blackjack, −1 loss, 0 push — and nothing before
+settlement), an episode is one hand. Plain blackjack is cleanly Markov — player total, softness,
+and upcard are all that matter. Counting *breaks* that, because deck composition now matters and
+isn't in the naive state; Problem B restores the Markov property by folding the true count and
+shoe depth into the state. Most toy projects never state this; being explicit about it is part
+of the audit stance.
 
-**D1 — The value is in the audit, not the agent. Tabular is the right tool.**
-The Problem A state is a tiny discrete tuple (~hundreds of cells). A neural network
-_represents nothing_ there — a lookup table is exact and fully inspectable. Tabular Monte
-Carlo control / Q-learning is the right-tool choice and keeps the policy readable cell by
-cell. Reaching for a network _because it's impressive_ would be the wrong-tool signal.
+---
 
-**D2 — Reuse the `Strategy` contract for evaluation; never modify the engine.**
-Every trained policy (tabular table or network) is wrapped as a `Strategy` implementing
-`decide(state) -> action` and run through the existing engine. Two different models are
-_comparable_ precisely because they are graded by the same harness on the same metrics
-(house edge through the engine; per-cell policy diff vs. basic strategy). The comparison
-lives at the evaluation layer; model internals are irrelevant to it.
+## Phase 1 — learning the provable: the tabular agent
 
-**D3 — A and B are separate and staged, not parallel.**
-Build A to fully complete-and-committed before starting B. This keeps each a clean,
-defensible milestone and prevents B's irreducible fuzziness from contaminating A's clean
-audit. A joint analysis comes last, comparing A, B, and the Phase 2 fixed strategies.
+The Problem A state space is a few hundred discrete cells. For that, **a lookup table is the
+right tool, and the value is in the audit, not the agent** (**D1**): tabular Monte Carlo control
+is exact and fully inspectable, cell by cell. Reaching for a network *because it is impressive*
+would be the wrong-tool signal — the network arrives later, as a deliberate experiment, not as
+a default.
 
-**D4 — Model arc: tabular first, then a DQN as a _deliberate literacy experiment_.**
-Phase 3's purpose is PyTorch/DL literacy, and the Phase 2 pathfinding `ARCHITECTURE.md`
-(D6) explicitly deferred "the net" to a later DL-focused project — this is that project.
-But state growth alone does **not** justify a network: even B's state stays small and
-discrete (tens of thousands of cells), so "B is bigger, therefore use a net" is the
-over-engineering trap. Instead we introduce the DQN _on Problem A, where ground truth
-still exists_, and ask the sharpest possible question: **does function approximation
-recover what we can prove is optimal, and what does it cost in samples and variance to
-learn what a lookup gives for free?** The network is then carried into B, where it finally
-has a plausible reason to exist (generalizing across count values, smoother bet-sizing).
-The net is a thing we _study_, validated against truth — not a necessity we pretend into
-the problem.
+Training needed an environment, and the engine's hand-playing routine is atomic — it plays a
+whole hand internally, consulting the strategy at each decision, and returns the full record.
+So the environment is an **episode-capture wrapper, not a control-flipping one** (**D7**): the
+learning agent is wrapped as a `Strategy`, the states handed to it are recorded, one hand is
+played through the unmodified engine, and the trajectory and reward are read back from the
+result. Monte Carlo control updates after complete episodes anyway, so nothing step-by-step is
+lost — and the engine stays untouched, which keeps the reuse promise of the instrument.
 
-_Revised sequencing & precision (mid-project)._ Problem A is completed (with splits) and
-reported as a standalone **tabular** result before the DQN, so each artifact is
-self-contained. And the switch is a _double_ one: A uses tabular **Monte Carlo control**
-(full-return, no bootstrapping), whereas a DQN is **deep Q-learning** (TD bootstrapping + a
-network). So A -> DQN changes both the representation (table -> net) and the learning rule
-(MC -> TD); the writeup names both honestly rather than calling A "Q-learning."
+Two audit-serving disciplines were fixed from day one. **Every run persists its config, seed,
+git hash, metrics — and its per-state visit counts — and is never overwritten** (**D8**). The
+visit counts are not hygiene: the project's central diagnostic — *did the agent fail to learn
+this cell, or was there nothing to learn?* — is unanswerable without knowing how often each
+state was actually seen. And **the experiment config started minimal, architected to grow**
+(**D9**): only the knobs in play, read from config rather than hardcoded, so each later
+investigation added a knob instead of a refactor.
 
-**D5 — Online and offline, compared through the lens of _coverage_.**
-We train both ways and compare — but framed honestly. Comparing them on raw house edge is
-a foregone conclusion (online explores, offline can't). The real lesson is **coverage**:
-an offline agent can only learn what its logs contain. Trained offline on `hands_random`
-(every action tried everywhere → broad coverage) it can learn a good policy; trained on
-`hands_basic` (only the optimal action in each state) it can _imitate_ but never learns
-what the alternatives were worth. So **offline quality is governed by the behavior policy
-that generated the data** — the direct analog of pathfinding's "it was the data, not the
-feature." Constraints: offline stays **tabular** (deep offline RL and its extrapolation-
-error handling is out of scope for a lean Phase 3), and the finding is framed around
-coverage, not performance.
+Splitting a pair turns one episode into a tree of sub-hands, which complicates the
+credit-assignment story, so **splits were staged in, not dropped** (**D6**): learning ran
+without splits first, the whole machinery was validated on the clean single-chain case, and
+splits were added before Problem A was called complete. The rationale is isolation of
+variables — had splits been present from day one and the agent underperformed, an RL bug and a
+split-handling bug would have been indistinguishable. The final action space has no holes.
 
-**D6 — Splits are staged in, not dropped. The final product has no holes.**
-Splitting turns one episode into a _tree_ (two hands, each its own trajectory whose
-rewards sum), which complicates the single-chain credit-assignment story. We therefore
-learn **without splits first**, validate the entire machinery (MC control, env, eval,
-policy-diff) on the clean single-chain case, then **add splits before A is called
-"complete."** Rationale is _isolation of variables_, not convenience: if splits were in
-from day one and the agent underperformed, we couldn't attribute the gap to an RL bug vs.
-a split-handling bug. Sequencing makes any new disagreement attributable to the splits
-work. (Mechanically, post-split hands are mostly normal hands, so the work is trajectory-
-branching bookkeeping and ensuring rare split states get _visited_ — an exploration
-problem, not new theory.)
+> **Outcome.** The agent rediscovers ~93% of the basic-strategy table from win/loss alone. The
+> residual disagreements were diagnosed, not shrugged at: forcing coverage of every legal
+> starting state (Monte Carlo with exploring starts) collapsed the genuine disagreements from 30
+> to 9, and every survivor is a near-tie where the two actions differ by almost nothing — the
+> residual was mostly the *cost of learning from experience* (rare cells are rarely visited),
+> with a floor of honest non-differences beneath it. That distinction — **failed to learn vs
+> nothing to learn** — is the audit closing as designed. Full analysis:
+> [the policy audit](blackjack-rl-policy-audit.pdf).
 
-**D7 — An episode-capture env wrapper, not a control-flipping one; offline reads logs directly.**
-The existing engine is "engine-calls-strategy," and `HandSimulator.play_hand()` is
-_atomic_ — it plays a whole hand internally (calling `strategy.decide()` at each point) and
-returns a `HandResult` carrying every `DecisionRecord` (state context + chosen action) and
-the `payout`. So we do **not** need a control-flipping `reset()/step()` env, and we do not
-need to modify the engine. Instead the wrapper _captures episodes_: our agent (wrapped as a
-`Strategy`) records the `GameState`s it is handed; we call `play_hand`; then we read the
-trajectory and reward back from the return value. Monte Carlo control updates after complete
-episodes anyway, so this fits directly. The DQN learns from transitions _reconstructed_ from
-the captured trajectory — within a hand, the next decision's state is the next state,
-intermediate reward is 0, and the terminal transition carries the payout. The one thing that
-_would_ require engine changes is genuine step-by-step interactive control, which our chosen
-methods do not need. Offline training needs no env at all; it consumes the existing logs.
-_Verified against `simulator/hand_simulator.py`, 2026-06-16._
+---
 
-**D8 — Run persistence from day one: never overwrite; log _visit counts_.**
-Every run saves config + seed + git hash + metrics, and is never overwritten (the
-pathfinding pattern). One RL-specific addition is non-negotiable from the start: **save
-per-state visit counts**, not just the final policy. The signature finding (§6) depends on
-them — you cannot tell "failed to learn" (under-visited cell) from "nothing to learn"
-(well-visited, near-equal-EV cell) without knowing how often each state was seen.
+## Phase 2 — the same truth, approximated: the network
 
-**D9 — Config: minimal now, architected to grow.**
-Start with a small config dataclass holding only the knobs we know we need (algorithm,
-exploration rate, episode count, seed, which state features are active), with code reading
-from the config rather than hardcoded constants — so adding a knob later is one line, not a
-refactor. The full registry-style harness earned its place gradually in pathfinding; we do
-not pre-build it here.
+State growth alone never justified a neural network — even Problem B's state stays small and
+discrete. Instead, **the DQN was introduced on Problem A as a deliberate literacy experiment,
+where ground truth still exists to grade it** (**D4**): does function approximation recover
+what can be proven optimal, and what does it cost in samples, variance, and stability to learn
+what a lookup holds exactly? The network then carries into Problem B, where a table no longer
+cleanly applies and generalization finally has a reason to exist.
 
-**D10 — Consume the Phase 2 engine as an installed package; one additive touch only.**
-`blackjack-sim` is consumed via an editable install (`pip install -e`) into the Phase 3
-venv, so `from simulator... import` and `from strategies... import` resolve from anywhere.
-Inspection confirmed the engine is usable _as-is_ for RL: `play_hand` returns trajectories
-and rewards in-process (D7), `BasicStrategy.decide(state)` supplies the ground truth, and
-the imports are absolute so packaging is clean. The **only** change to phase2 is adding a
-`pyproject.toml` — packaging metadata, no engine logic touched. This keeps a single source
-of truth (no vendored copy to drift) and makes the P2→P3 dependency explicit in the build,
-which is the continuity thread made real. Cost, accepted: `blackjack-rl` is not standalone
-— it requires the sibling project present (expected in a monorepo).
+The switch is a *double* one, and the design names both honestly: the representation changes
+(table → network) **and** the learning rule changes (Monte Carlo's full returns → temporal-
+difference bootstrapping). A caveat stated up front: blackjack hands are one-to-four decisions
+with terminal-only reward, so over such short horizons TD buys almost nothing — the experiment
+is about the *network*, and the write-up must not pretend bootstrapping is the improvement.
 
-_Problem B decisions (added 2026-06-26, the methods-design session). They sit on the A/B split
-of §3 and the MDP note of §4._
+> **Outcome.** The network pays for its generalization: out of the box it plateaus well below
+> the table, and reaching table-level fidelity takes a stack of stabilizers the table never
+> needed. The report's verdict is kept deliberately narrow: *for this small, known, exactly
+> tabulatable problem, the table is the simpler and more robust tool* — the DQN's value is
+> showing what generalization adds, what it destabilizes, and why representation choices matter,
+> before moving to a problem where the table no longer applies. Full analysis:
+> [from table to network](from-table-to-network.pdf).
 
-**D11 — Problem B objective: maximize log-bankroll growth (Kelly); ruin-aware.** B has no clean
-optimum (§3) — the optimum is an EV-vs-ruin tradeoff and the reward encodes a risk preference we
-choose. We choose **expected log-growth** (the Kelly objective): per-hand reward is the log-wealth
-increment `log(W_after / W_before)`, so the return is `log(W_final / W_0)` and maximizing it _is_
-Kelly. Over-betting self-punishes in log, so the objective inherently balances growth against ruin.
-(Resolves the §10 "reward design" open question.)
+---
 
-**D12 — Factored policy (play + bet), with a monolithic baseline.** Under log-growth, play and bet
-**separate**: optimal _play_ maximizes per-hand EV (independent of bankroll), optimal _bet_ is the
-Kelly fraction given the edge at the current count. So the primary agent is **factored** — a
-count-aware _play_ model trained on EV (the Step-2 DQN + count) and a _bet_ model trained on
-log-growth — which is the structure the objective hands us, not a convenience. Caveat to state: the
-separation is exact only in the small-bet limit; doubles/splits raise the mid-hand stake, coupling
-weakly to bankroll. We also build a **monolithic** end-to-end agent (one net, play+bet on
-log-growth) as a comparison baseline — the honest "does end-to-end learning recover the principled
-factoring?" question, reprising the A-vs-DQN arc.
+## Phase 3 — betting, where the truth runs out
 
-**D13 — B state: given count; bankroll only where ruin-awareness needs it.** We _feed_ the engine's
-Hi-Lo `true_count` and `decks_remaining` (B restores the Markov property by folding them in, §4); the
-**bet** model also sees the **bankroll** (the ruin-aware optimum depends on it), while the **play**
-model does not (EV play is bankroll-independent). Learned-count — feed raw remaining-rank composition
-and let the agent discover its own statistic, _audited against Hi-Lo_ — is **parked as an optional
-later stretch**, not in the core.
+Problem B has no correct table, so the first decision is the objective itself — and it must be
+chosen, not discovered. The objective is **expected log-bankroll growth — the Kelly criterion —
+on a ruin-aware session** (**D11**): per-hand reward is the log-wealth increment, so the return
+over a session is the log of final-over-starting bankroll. Log-growth is a *chosen* risk
+preference (expected-value maximization over-bets toward ruin; alternatives like mean-variance
+exist), and the design says so plainly. Its virtue is that over-betting punishes itself in
+log — growth and ruin-avoidance live in one number. A practical consequence discovered in
+training and folded here: for pure growth the per-hand log-objective is *myopic* (each hand's
+Kelly bet is optimal regardless of horizon), so the growth regime trains with no discounting
+at all.
 
-**D14 — Finite-bankroll, ruin-aware MDP (the risk preference made concrete).** The session is a finite
-starting bankroll, bets in units, with a hard **ruin** barrier (terminal). This makes the optimum
-genuinely ruin-aware: the agent must learn a **bet-ceiling that tightens as the bankroll shrinks** — a
-richer, honest target than pure scale-free Kelly, and the learned agent doing so (diffed vs the
-analytic full-Kelly reference) is the headline auditable result. _(Reframed 2026-06-28 from "bet below
-full Kelly near the barrier": the B2b ruin probe measured that full-Kelly-fraction sizing never ruins
-here — only over-betting does — so the learnable result is the ceiling, not a bend below continuous Kelly.)_ **Contingent encoding investigation** (mirrors the Step-2 encoding finding,
-CONCEPTS §21): build the naive finite-bankroll agent and observe; only if it struggles, vary the
-**bankroll encoding** (raw units → scale-free: fraction-of-initial / log-bankroll / units-above-min-bet)
-and report whether a better representation makes the ruin-aware policy learnable. Pursue only if the
-data calls for it — don't manufacture the finding.
+Under log-growth, playing and betting **separate**: optimal play maximizes per-hand expected
+value regardless of bankroll, and optimal betting is the Kelly fraction given the edge at the
+current count. So the agent was designed **factored — a play model and a bet model — with a
+monolithic end-to-end agent as the comparison baseline** (**D12**): the structure the objective
+dictates rather than a convenience (exact only in the small-bet limit; doubles and splits couple
+weakly to bankroll — a caveat the write-up states). The factoring is also what made a
+*bet-first* build order possible: the bet model, running on fixed basic-strategy play, is the
+classic counting bettor and carries most of the edge.
 
-**D15 — Discrete bet spread (keep both heads value-based).** The bet action is a small configurable
-**spread** of unit bets (within table min/max). Value-based DQN selects by `argmax` over a finite
-Q-vector and bootstraps with `max_{a'} Q(s',a')` — both need an enumerable action set, so a
-_continuous_ bet would force an actor-critic / policy-gradient method (a different learning rule) for
-one decision. Discretizing keeps **one method for both heads**, at ~zero resolution cost since real
-bets are discrete units. (General concept: CONCEPTS §29.)
+In the end only that bet head was built — the count-aware play head and the monolithic baseline
+were cut with the project's scope (see *Scope cut & future work*) — but the separation argument
+stands, because it is what justified betting as the self-contained core.
 
-**D16 — B training & coverage: natural play default; coverage forcing contingent.** The play DQN
-generalizes over the _smooth_ `true_count` input, so it interpolates the count-deviation trend without
-forced coverage of every extreme count — and Problem A already showed exploring-starts barely helped
-the _net_ (a table needs each bucket visited; a net does not). Default = **natural session play**;
-**diagnose** extreme-count deviations against the known **index plays**; reach for
-stratified/exploring-starts coverage only if diagnosis shows starved or wrong deviations (reporting
-honestly if it underwhelms, as in A).
+The bet model's **state is the given Hi-Lo true count, the shoe depth, and the bankroll**
+(**D13**). The count is *fed*, not discovered — this is what restores the Markov property that
+counting broke. Bankroll is in the state because a ruin-aware optimum depends on it; an agent
+that cannot see its wealth cannot learn restraint. (Letting the agent *discover* its own
+counting statistic from raw deck composition was parked as a stretch goal, never core.)
 
-**D17 — Evaluation for B: a baseline ladder + reconstructed references.** B has "no clean table" (§3),
-but we still audit against reconstructed ground truth: the analytic **full-Kelly bet curve** (from
-empirically-measured edge-by-count) and the known **index-play deviations**. Two axes: **outcome**
-(log-growth rate; final-bankroll distribution) and **risk** (probability of ruin — the natural headline
-for a finite bankroll — plus drawdown/variance). The **baseline ladder** attributes the edge:
-flat-bet + basic → Kelly-bet + basic (isolates the betting lever) → factored → monolithic. Rungs 1–2
-are cheap (fixed basic strategy + analytic betting), so the attribution is high value for low cost.
+The session itself is a **finite bankroll with a hard ruin barrier** (**D14**) — the risk
+preference made concrete. Ruin is terminal; the bankroll is in min-bet units. This decision's
+*expected* headline moved twice as evidence arrived, and the current statement is the honest
+one: measurement showed Kelly-proportional sizing essentially never ruins here — only
+over-betting ruins — so the learnable skill is **restraint** (a bet ceiling), not a subtle bend
+below Kelly. The design realizes this as two named regimes differing only in bankroll:
 
-_Kelly baseline — discrete vs continuous (decided 2026-06-29, B2c)._ The Kelly rung is reported two
-ways. **Discrete** Kelly snaps `f*·W` to the bet spread — the **comparison baseline** the learned DQN
-bettor is graded against, on the *same* action set, so the DQN-vs-Kelly gap isolates "learned vs
-analytic" rather than conflating it with "discrete vs continuous." **Continuous** Kelly (raw `f*·W`,
-env-bounded to the spread's [min,max]) is kept as the analytic **ceiling**; the discrete→continuous
-gap is the cost of the finite menu (measured ≈ 0 in B2c). Both appear in the report, labelled as the
-fair same-menu comparison vs the unreachable ideal.
+| Regime | Bankroll | What it isolates |
+|---|---|---|
+| *growth* | 400 units | spread top ≈ full Kelly at high counts; ruin dormant — the pure betting lever |
+| *ruin* | 200 units | the same spread now over-bets; the barrier is reachable — restraint is the thing to learn |
 
-## 6. Signature deliverables & the finding
+The originally contingent question "does the *encoding* of bankroll matter?" was in fact
+triggered and run — see the outcome below.
 
-**Deliverables.** A **policy-diff heatmap** — learned action vs. basic-strategy action per
-state cell — and the agent's **house edge vs. the 0.45% anchor**, both produced through the
-existing engine.
+The bet action is a **discrete spread of unit bets** (**D15**): value-based Q-learning selects
+by argmax over a finite action set and bootstraps through a max over it, so a continuous bet
+would force a second learning algorithm (actor-critic) into the project for one decision.
+Discretizing keeps one method for both heads at ~zero cost — real table bets are discrete units
+anyway. The spread was then *derived, not assumed*: sized against the measured edge curve
+(arithmetic 1–8, matching Kelly's roughly linear ramp; geometric spacing over-resolves the
+bottom and jumps at the top — stated as reasoning, since the alternative was never measured) and
+**held constant across every experiment**, so that measured differences always attribute to the
+variable under study, never to the action set.
 
-**The finding (the discovery arc).** Where the learned policy disagrees with the proven
-optimum, separate two genuinely different causes:
+With no table to diff against, evaluation rests on **a baseline ladder and reconstructed
+references** (**D17**). The references: an edge-by-count curve measured in the training
+environment itself (20M hands; break-even at true count ≈ +0.76, consistent with the folklore
+"+1"), the analytic full-Kelly bet curve built from it, and the literature's index-play table.
+The ladder, bottom up:
 
-- **(a) Exploration failure** — rare, under-visited cells (e.g. splits, soft hands). A
-  _fixable_ shortfall: more episodes / better exploration closes it.
-- **(b) Nothing to learn** — well-visited cells where two actions have near-equal EV and
-  the reward signal genuinely _cannot_ distinguish them. This is **not a failure**; it's an
-  honest non-difference.
+| Rung | Bettor | Role |
+|---|---|---|
+| 1 | flat bet + basic play | the floor — everything above it is what betting adds |
+| 2 | analytic Kelly, on the same discrete spread | the fair comparison |
+| 3 | analytic Kelly, continuous | the unreachable ceiling (gap to the discrete rung measured ≈ 0) |
+| 4 | the learned bettor | the subject |
 
-**Distinguishing "failed to learn" from "nothing to learn" is the spine of this project** —
-the analog of Phase 2's within-group test and regime-tag. The visit counts from D8 are what
-make that distinction defensible rather than hand-waved.
+The Kelly rung appears in both discrete and continuous forms deliberately, so the
+learned-vs-Kelly gap isolates *learned vs analytic* rather than conflating it with *discrete vs
+continuous*. Outcomes are always reported on **two axes that are never collapsed** — growth and
+ruin (with drawdown and the final-bankroll distribution behind them) — because a bettor can top
+the growth table by surviving on luck.
 
-## 7. Evaluation methodology
+> **Outcome — the finding inverted the design's expectation, and that is the result.** The
+> learned bettor never rediscovers Kelly: across regimes, stabilizers, and sample sizes it
+> converges to flat-minimum betting, and the intermediate Kelly-shaped policies it passes
+> through are noise excursions, not better policies. Only the analytic Kelly bettor beats flat
+> betting — and even it is net-negative at modest bankrolls (the table-minimum tax: something
+> must be bet on negative-count hands; sitting those out flips growth positive). The wall is
+> *informational, not architectural*: a denoised-reward oracle learns the ramp instantly with
+> the same network, and the seductive alternative — "it keyed on wealth, not edge" — was tested
+> twice (an encoding ablation and a coverage experiment) and falsified twice. The count edge is
+> real but sits below the per-hand noise the agent must estimate it from; the analytic route —
+> measure the edge once, derive the bet — is simply the right tool. Structure beats end-to-end
+> learning on a sub-noise signal. Full analysis:
+> [betting against the noise](betting-against-the-noise.pdf).
 
-All policies are evaluated identically, through the engine, via the `Strategy` contract
-(D2). Two axes, never collapsed to one number: **policy fidelity** (per-cell agreement with
-the basic-strategy table, weighted by how often each cell actually occurs) and **outcome**
-(house edge vs. the 0.45% anchor, with enough hands for a meaningful confidence interval).
-Reporting fidelity and outcome separately matters because an agent can match the table
-almost everywhere yet differ on a few high-frequency cells, or vice versa.
+---
 
-## 8. Staged build plan
+## The evaluation ethic (constant across all three phases)
 
-Independently committable milestones. **Revised mid-project:** the offline coverage study was
-dropped, Problem A is reported as a standalone tabular result _before_ the DQN, and the DQN
-debuts validated on A and is then deployed on B. Problem B is built to completion through B6 (the
-full bet → play → monolithic spine + report); the optional depth investigations are parked as future
-work, out of the committed scope (see §9, D14).
+The phases share one methodology, which is the project's actual through-line:
 
-1. **Env + scaffolding** — episode-capture wrapper (D7), config (D9), persistence with visit
-   counts (D8). [done]
-2. **A · tabular · online · no splits** — Monte Carlo control; policy-diff heatmap + house-edge
-   vs the anchor. [done] Extended well past plan into the exploration investigation: epsilon
-   schedules, constant-alpha (recency weighting), the policy-diff diagnosis, and learning-curve
-   convergence instrumentation (A8, A10).
-3. **A · splits** — complete the action space so the heatmap has no holes (D6). Adds a
-   pair-aware state (config-driven, so no-split runs stay reproducible) and branching
-   credit-assignment; the policy is retrained (the no-split runs remain valid historical
-   results). See A11.
-4. **Report · Problem A** — the durable narrative PDF: rediscovery audit, the exploration/bias
-   finding, the irreducible residual, convergence. Figures re-rendered from saved runs.
-5. **DQN** — PyTorch function approximation. Debuts **validated on Problem A** against the exact
-   table (D4), then carried into B. (Also the MC-control -> deep-Q-learning switch — table->net
-   and Monte-Carlo->TD at once; see D4.)
-6. **B · counting & betting** — the DQN deployed where clean ground truth ends (§3); **bet-first**
-   sequence (see D11–D17), each sub-stage independently committable:
-   - **B0** session env + scaffolding (`problem_b_config`: counting on, shoe persists, ~75%
-     penetration; session-capture wrapper with bankroll + ruin; B-run persistence) — no engine changes.
-   - **B1** edge-by-count + analytic references (full-Kelly bet curve; index-play table).
-   - **B2** bet model — discrete spread on log-growth with fixed basic play → the classic
-     counting-bettor (most of the edge), audited vs the Kelly curve and flat-bet floor. **Core lands here.**
-   - **B3** count-aware play model (Step-2 DQN + count, EV, natural play; diagnose vs index plays)
-     → the factored system.
-   - **B4** monolithic baseline (end-to-end play+bet on log-growth) → factored-vs-monolithic comparison.
-   - **B5** **parked as future work (out of committed scope, 2026-06-28):** bankroll-encoding,
-     stratified play coverage, learned-count stretch. "Open for future, maybe" — revisit only after B6.
-   - **B6** Problem-B report PDF (+ the A/B joint section) — the close of committed Problem B; its
-     ship triggers the per-project-repo restructure.
-7. **Joint analysis + final writeup** — A, B, and the Phase 2 fixed strategies side by side.
+- **Identical terms.** Every policy is graded through the same engine via the same contract —
+  never a bespoke evaluation per model.
+- **A reference and a ladder, always.** Against the table where one exists; against
+  reconstructed analytic references where it doesn't; with cheap baselines underneath so every
+  claimed effect has an attribution.
+- **Axes are never collapsed.** Fidelity and edge for hand-play; growth and ruin for betting.
+  One number always hides the story (a high-growth bettor with 53% ruin is a survivor-bias
+  artifact, not a winner).
+- **Rank only on tight estimates.** Edges carry sampling error; ranking close configs on noisy
+  short evaluations misranked them more than once. Claims ride on re-evaluations sized for the
+  gap being claimed, with uncertainty reported.
+- **Diagnose, don't assert.** Every headline attribution was earned by a controlled experiment:
+  forced coverage for the tabular residual, ruled-out suspects for the network's instability,
+  the oracle and two falsification tests for the bettor's wall.
 
-_Dropped — offline coverage study (former stage 4):_ its "coverage governs the outcome" lesson
-is already shown twice (pathfinding's regime tag; this project's under-exploration of rare
-cells), it is not deep learning, and it is better revisited in the LLM phase (RLHF-adjacent).
+---
 
-## 9. Scope & non-goals (deliberate restraint)
+## Scope & non-goals
 
-- **No deep offline RL.** Offline stays tabular (D5).
-- **No network where a table suffices**, except as the explicitly-framed literacy
-  experiment of D4.
-- **No clean-optimum claims for B.** B optimizes a chosen risk preference; we say so.
-- **No engine changes.** All work is additive around the validated Phase 2 engine (D2).
-- **Problem B is built to depth, not breadth** (revised 2026-06-28, superseding the original "lean —
-  literacy, not mastery, depth reserved for Phase 4"). Depth = _rigor on the core questions_
-  (baselines, CIs, careful "failed-to-learn vs nothing-to-learn" diagnosis); breadth = new
-  semi-related studies, which each earn their slot individually. **Committed scope = the full B-spine**
-  (bet → count-aware play → monolithic → report); the optional investigations (bankroll-encoding,
-  learned-count, exploring-starts coverage) are **parked as future work, not part of done**. The
-  completion gate governs: finish the committed spine before opening anything new.
+- **No engine changes, ever.** All work is additive around the validated engine.
+- **No network where a table suffices** — except as the explicitly framed experiment of the
+  network phase.
+- **No clean-optimum claims for the betting problem.** It optimizes a chosen risk preference,
+  and the write-ups say so.
+- **No deep offline RL.** Offline learning was scoped to tabular before being cut entirely.
+- **Depth over breadth.** Rigor on the core questions — baselines, confidence intervals, the
+  named-cause audit — rather than semi-related side studies, each of which had to earn its
+  slot individually (most didn't; see below).
 
-## 10. Open questions (to decide when we reach them)
+---
 
-- Monte Carlo control variant: exploring-starts vs. ε-greedy (and the ε schedule) — both
-  exist to guarantee rare cells get visited; decide at Stage 2.
-- DQN specifics (network size, replay, target-network cadence) — defer to Stage 5; keep
-  the smallest thing that learns.
-- ~~B's reward design — how explicitly the risk preference (EV vs. ruin) is encoded.~~
-  **Resolved (2026-06-26):** log-bankroll growth (Kelly) on a finite-bankroll, ruin-aware MDP —
-  see D11, D14.
-- _New (B), to decide at implementation:_ bet-spread granularity (number/size of levels);
-  bankroll encoding (only if the contingent study in D14 is triggered); penetration depth and
-  starting-bankroll size for the session env.
+## Scope cut & future work
+
+The project ends at the betting report — a deliberate endpoint, not an abandonment. What was
+cut, and where the threads live:
+
+- **The count-aware play head and the monolithic baseline** — the second half of the factored
+  design — were cut at the endpoint decision: betting carries most of the edge, the
+  factored-vs-monolithic question reprises an arc already run twice (table vs net, analytic vs
+  learned), and the bet investigation had already produced the deeper finding. The separation
+  rationale survives inside the factored-agent decision; the index-play reference table, built
+  as the play head's audit target, remains in the codebase unconsumed. Revisit only if the
+  project is ever extended past its report.
+- **Offline learning from logged data** (**D5** — tombstone). Dropped mid-project: its lesson
+  ("coverage of the behavior data governs what can be learned") had already been shown twice
+  elsewhere, and it added no deep-learning content. The thread would belong to an
+  RLHF-adjacent study in a later phase, not here.
+- **Play-model training policy** (**D16** — tombstone). Natural-play training with contingent
+  coverage forcing, designed for the play head; died with it. Its sibling idea — oversampling
+  rare high counts for the *bettor* — was analyzed, predicted confirmatory, and deferred; it
+  survives as a future-work entry in the betting report.
+- **Learned counting** (feed raw deck composition, audit the discovered statistic against
+  Hi-Lo) — parked as a stretch before Phase 3 began; never core. A genuine future experiment.
+- Smaller deferred items (bet-head multi-step returns, horizon-relative ruin, prioritized
+  replay, paired common-random-number evaluation) are catalogued honestly in the betting
+  report's future-work section — considered, scoped out on purpose.

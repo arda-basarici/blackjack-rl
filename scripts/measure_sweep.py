@@ -1,4 +1,4 @@
-"""Bankroll sweep — growth vs starting bankroll (DESIGN D17, build stage B2c sidebar).
+"""Bankroll sweep — growth vs starting bankroll (DESIGN D17).
 
 Full-Kelly's net loss is the table-minimum tax, which fades as ~1/bankroll (the Wonging sidebar
 isolated it). This sweeps the bankroll to *show that curve*: continuous full-Kelly across a range of

@@ -1,9 +1,9 @@
-"""Persist & reload a trained bet model (``BetAgent``).
+"""Persist & reload a trained bet model (``BetAgent``) — ARCHITECTURE A19.
 
 Mirrors the A/DQN convention: ``core.persistence.save_run`` writes ``record.json`` (config + metrics +
 auto-stamped provenance) into a fresh run dir, and the weights go beside it as ``model.pt`` — the same
 shape ``dqn.embedding.load_agent`` reads back. Save the weights once, then reuse the agent across every
-downstream wiring (four-axis eval, figures, B3 factored play) without retraining.
+downstream wiring (four-axis eval, figures) without retraining.
 
 The ``record.json`` has two distinct blocks:
 - ``construction`` — the minimal spec to rebuild the agent *shell* before loading weights (levels set

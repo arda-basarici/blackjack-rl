@@ -1,4 +1,4 @@
-"""Generic parallel cell-evaluation for the Problem-B baseline experiments (DESIGN D17, B2c+).
+"""Generic parallel cell-evaluation for the Problem-B experiments (DESIGN D17; ARCHITECTURE A16).
 
 A **cell** = a labelled ``(SessionConfig, play Strategy, BetPolicy)`` to evaluate. ``evaluate_cells``
 fans every cell across CPU cores — each (cell, worker) chunk seeded distinctly so it runs as its own

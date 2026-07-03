@@ -1,4 +1,4 @@
-"""Signature figure for the edge-by-count measurement (B2a, commit ii).
+"""Signature figure for the edge-by-count measurement.
 
 Renders the player edge vs Hi-Lo true count from the committed edge-by-count reference (produced by
 ``measure_edge_by_count.py``, at ``core.paths.EDGE_REFERENCE_PATH``): edge% with 95% CIs on the left

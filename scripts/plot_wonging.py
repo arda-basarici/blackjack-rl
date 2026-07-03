@@ -1,4 +1,4 @@
-"""Figure for the Wonging experiment (DESIGN D17, build stage B2c sidebar).
+"""Figure for the Wonging experiment (DESIGN D17).
 
 Renders the headline of ``measure_wonging.py``: forced (must bet the table minimum) vs wong (may sit
 out non-positive counts) growth per config — the table-minimum tax flipping growth from negative to

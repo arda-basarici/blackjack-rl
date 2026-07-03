@@ -1,14 +1,14 @@
-"""Bet model — the headline lever (DESIGN D12/D15, build stage B2).
+"""Bet model — the headline lever (DESIGN D12/D15; ARCHITECTURE A17).
 
 A discrete-spread bet policy: state = (true_count, decks_remaining, bankroll) → action = a
 unit-bet level from the spread. Value-based DQN (reuses dqn.QNetwork), trained on log-growth
 (Kelly); ruin-aware because bankroll is in-state (D14). Audited vs the analytic full-Kelly curve.
 
 The D17 baseline ladder, bottom to top — each a ``BetPolicy`` (env.py), measured on identical terms:
-- ``FlatBet`` (B0) — the constant-wager floor (rung 1); betting variation is the lever above it.
-- ``KellyBet`` (B2c) — the analytic full-Kelly bettor (rung 2): sizes from the measured edge-by-count
+- ``FlatBet`` — the constant-wager floor (rung 1); betting variation is the lever above it.
+- ``KellyBet`` — the analytic full-Kelly bettor (rung 2): sizes from the measured edge-by-count
   curve, the reference the learned ``BetAgent`` is audited against.
-- ``BetAgent`` (B2d) — the learned DQN bettor (rung 3); "does RL rediscover Kelly?"
+- ``BetAgent`` — the learned DQN bettor (rung 3); "does RL rediscover Kelly?"
 """
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ class FlatBet:
 
 class KellyBet:
     """Analytic full-Kelly bettor — rung 2 of the D17 ladder (Kelly-bet + basic play), the reference
-    the learned ``BetAgent`` (B2d) is audited against (DESIGN D17, build stage B2c).
+    the learned ``BetAgent`` is audited against (DESIGN D17).
 
     Sizes each wager from the measured edge-by-count curve: ``bet = kelly_fraction · f*(count) ·
     bankroll``, where ``f*(count)`` is the full-Kelly fraction at the count from a ``kelly_curve``
@@ -144,7 +144,7 @@ def encode_bet_state(
 
 class BetAgent:
     """count, depth, bankroll → discrete bet level: the value-based DQN bettor, rung 3 of the D17 ladder
-    (the B2d core; "does RL rediscover Kelly?").
+    ("does RL rediscover Kelly?").
 
     State ``(true_count, decks_remaining, bankroll)`` encoded by :func:`encode_bet_state`; a ``QNetwork``
     (reused from the play-side DQN) outputs one Q per ``levels`` entry; greedy = argmax. Implements the
@@ -228,7 +228,7 @@ def greedy_bet_curve(
     agent: BetAgent, counts: Sequence[int], *, bankroll: float, decks_remaining: float
 ) -> dict[int, float]:
     """The agent's greedy wager at each true count (fixed bankroll + shoe depth) — the bet-vs-count
-    diagnostic: overlaid on the analytic Kelly curve (B2d-3) and watched forming over training (the
+    diagnostic: overlaid on the analytic Kelly curve and watched forming over training (the
     checkpoint probe). Greedy, so it reads the *policy*, not the exploring behaviour."""
     return {
         c: agent.bet(true_count=float(c), decks_remaining=decks_remaining, bankroll=bankroll)

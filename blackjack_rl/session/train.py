@@ -1,9 +1,7 @@
-"""Training loops & orchestration for Problem B (build stages B2–B4).
-
-- `train_bet`        — the bet model on log-growth, with fixed basic play (B2d).
-- `run_factored`     — assemble count-aware play (dqn) + bet model into the factored policy (B3).
-- `train_monolithic` — the end-to-end baseline (B4).
-Persists runs via core.persistence (record + model), like the A/DQN experiments.
+"""Training loop for the learned bettor: ``train_bet`` — the bet model on log-growth, with
+fixed basic-strategy play, reusing the DQN stack (TD update, target network, schedules;
+ARCHITECTURE A17). Trained bettors are persisted by the runner
+(``scripts/train_bet_agent.py`` → ``session.persistence``), like the play-side experiments.
 """
 from __future__ import annotations
 
@@ -26,13 +24,14 @@ from blackjack_rl.session.env import GROWTH_BANKROLL, SessionConfig, SessionEnv,
 
 @dataclass(frozen=True)
 class BetTrainConfig:
-    """Immutable hyperparameters for one bet-model (B2d) training run.
+    """Immutable hyperparameters for one bet-model training run.
 
     A dedicated config (like ``DQNConfig`` for the play side) — the play knobs (with_splits, encoding,
     reward_baseline, curriculum) are meaningless here, and the bet model has its own (the regime, the
     ruin penalty, the bankroll reference). It **composes** a ``SessionConfig`` (the regime — growth/ruin
     — defining the MDP: bankroll, horizon, spread, table rule), so it lives in the session layer next to
-    the env, not in ``core`` (``core`` is the base layer and must not depend on ``session`` types).
+    the env, not in ``core`` (``core`` is the base layer and must not depend on ``session`` types;
+    ARCHITECTURE A18).
 
     The agent's discrete menu is ``session.bet_spread`` and its shoe size is read from the env's sim
     config, so the encoding stays consistent with the environment by construction.
@@ -46,7 +45,7 @@ class BetTrainConfig:
     lr / lr_schedule / lr_end : Adam step and its (optional) decay (CONCEPTS §26).
     gamma             : TD discount. **Default 0.0 (myopic).** Kelly is the per-hand log-optimum, so in
                         the growth regime (ruin dormant) the bandit objective learns the count->bet ramp
-                        at minimum variance; gamma=1 telescopes the ~1000-hand return and DIVERGES (B2d-3
+                        at minimum variance; gamma=1 telescopes the ~1000-hand return and DIVERGES (measured
                         finding). The *ruin* regime needs an intermediate gamma in (0,1) — its own value,
                         not yet characterized — to value ruin-avoidance; set it per-run, never 1.0.
     batch_size / buffer_capacity / warmup / updates_per_step / train_every / target_sync_every /
@@ -222,11 +221,3 @@ def train_bet(
             loss_sum, loss_count = 0.0, 0
 
     return agent
-
-
-def run_factored(config):
-    raise NotImplementedError("B3: factored play(EV, count-aware) + bet(Kelly) orchestration")
-
-
-def train_monolithic(config):  # -> MonolithicAgent
-    raise NotImplementedError("B4: end-to-end play+bet on log-growth")

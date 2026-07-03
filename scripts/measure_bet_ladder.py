@@ -1,4 +1,4 @@
-"""Bet-ladder evaluation — flat vs Kelly across the growth/ruin regimes (DESIGN D17, build stage B2c).
+"""Bet-ladder evaluation — flat vs Kelly across the growth/ruin regimes (DESIGN D17).
 
 Rungs 1-2 of the baseline ladder (+ an over-bet foil), measured on identical terms: basic-strategy
 play throughout, each bettor scored on the two axes (metrics.py) — outcome (log-growth rate,
@@ -7,7 +7,8 @@ final-bankroll shape) and risk (ruin probability, drawdown). Eight cells:
     {growth, ruin} config  x  {flat, Kelly-discrete, Kelly-continuous, flat-max-8} bettor
 
 - **flat** (1u) is the under-bet floor (rung 1); **Kelly-discrete** snaps to the spread = the
-  comparison baseline the learned DQN bettor (B2d) is audited against (same action set; decision A);
+  comparison baseline the learned DQN bettor is audited against (same action set, so the gap
+  isolates learned-vs-analytic — DESIGN D17);
   **Kelly-continuous** is the analytic ceiling (unrounded f*.W) — the discrete->continuous gap is the
   cost of the finite menu.
 - **flat-max-8** bets the spread top every hand = the naive over-bet foil. It populates the *ruin*

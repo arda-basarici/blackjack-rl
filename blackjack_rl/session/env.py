@@ -1,4 +1,4 @@
-"""Session environment — the Problem B MDP (DESIGN D11/D14, build stage B0).
+"""Session environment — the Problem B MDP (DESIGN D11/D14; ARCHITECTURE A14).
 
 Many hands from one persisting, depleting shoe (counting on), against a finite bankroll with a
 hard ruin barrier. Per-hand reward is the log-wealth increment ``log(W_after / W_before)`` so the
@@ -9,8 +9,8 @@ engine changes.
 This is a **capture driver**, the Problem-B analog of ``core.env`` (which captures single Problem-A
 hands): given a play ``Strategy`` and a ``BetPolicy`` it plays a whole session and returns a
 ``SessionCapture`` whose per-hand ``HandRecord``s are exactly the bettor's transitions
-``(state, bet, log_reward, done)`` — so the B2 trainer consumes them the way the DQN trainer consumes
-``CapturedHand`` today. One code path serves both training-data capture and baseline evaluation, so
+``(state, bet, log_reward, done)`` — so the bet trainer consumes them the way the DQN trainer consumes
+``CapturedHand``. One code path serves both training-data capture and baseline evaluation, so
 every rung of the ladder (D17) is measured on identical terms.
 
 Reproducibility: the engine shuffles with Python's global ``random``; seed ONCE before a batch
@@ -35,7 +35,7 @@ class BetPolicy(Protocol):
 
     Decoupled from the engine's ``BettingStrategy`` (which needs a full ``GameState``) because the
     bet is decided *before* the deal — only the count, shoe depth, and bankroll are known. The
-    flat-bet baseline, the B1 Kelly bettor, and the B2 DQN bettor all implement this.
+    flat-bet baseline, the analytic Kelly bettor, and the learned DQN bettor all implement this.
     """
 
     def bet(self, *, true_count: float, decks_remaining: float, bankroll: float) -> float:
@@ -52,7 +52,7 @@ class IndexedBetPolicy(BetPolicy, Protocol):
     action indices — exact even when the env clamps the wager to the bankroll (near ruin the clamped wager
     is not a menu level, so it cannot be reverse-mapped from the recorded wager). The analytic ``FlatBet``
     / ``KellyBet`` are plain ``BetPolicy`` (no index), so their captures carry ``bet_level = None``. The
-    learned ``BetAgent`` (B2d) implements this. ``runtime_checkable`` so the env distinguishes the two via
+    learned ``BetAgent`` implements this. ``runtime_checkable`` so the env distinguishes the two via
     ``isinstance`` (the ``select_level`` method is the distinguishing member)."""
 
     levels: tuple[float, ...]
@@ -63,7 +63,7 @@ class IndexedBetPolicy(BetPolicy, Protocol):
 
 
 BET_SPREAD: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8)
-"""The project's single bet ladder (B2b) — one shared **arithmetic** spread, held constant across
+"""The project's single bet ladder (DESIGN D15) — one shared **arithmetic** spread, held constant across
 every config and experiment so all measured differences attribute to the variable under study
 (bankroll, encoding, algorithm), never to the action set.
 
@@ -169,7 +169,7 @@ def ruin_config(seed: int = 42) -> SessionConfig:
 
 @dataclass(frozen=True)
 class HandRecord:
-    """One hand as the bettor's MDP sees it — a transition the B2 trainer reconstructs from.
+    """One hand as the bettor's MDP sees it — a transition the bet trainer reconstructs from.
 
     The state at decision time is ``(true_count, decks_remaining, bankroll_before)``; the action is
     ``bet``; the reward is ``log_reward``. The *next* state is the following record's pre-deal state
@@ -177,8 +177,8 @@ class HandRecord:
     the trainer. ``payout`` is the engine's signed net (already scaled by the bet).
 
     ``log_reward = log(bankroll_after / bankroll_before)``, except a total wipe-out
-    (``bankroll_after == 0``) is ``-inf`` — mathematically honest; B2 chooses any finite ruin
-    penalty as a reward-shaping decision there.
+    (``bankroll_after == 0``) is ``-inf`` — mathematically honest; the trainer chooses any finite
+    ruin penalty as a reward-shaping decision there.
 
     ``bet_level`` is the *index* an ``IndexedBetPolicy`` chose (the action the value-based trainer credits,
     exact even where the env clamped ``bet`` to the bankroll); ``None`` for a plain ``BetPolicy``

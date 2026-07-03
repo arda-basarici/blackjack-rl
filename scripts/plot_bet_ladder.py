@@ -1,4 +1,4 @@
-"""Figures for the bet-ladder evaluation (DESIGN D17, build stage B2c).
+"""Figures for the bet-ladder evaluation (DESIGN D17).
 
 Renders the flat-vs-Kelly-vs-over-bet story from a saved ``bet_ladder`` artifact (``measure_bet_ladder
 .py``), three figures each making one point:

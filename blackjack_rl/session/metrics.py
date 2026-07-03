@@ -1,11 +1,11 @@
-"""Outcome & risk metrics for Problem B (DESIGN D17, build stage B2c).
+"""Outcome & risk metrics for Problem B (DESIGN D17).
 
-Two axes, never collapsed (mirrors §7's discipline, adapted to B):
+Two axes, never collapsed (the project-wide evaluation discipline, adapted to sessions):
 - **outcome** — log-growth rate per hand; final-bankroll distribution,
 - **risk**    — probability of ruin (headline for a finite bankroll); drawdown distribution.
 
-All are **pure functions over an already-played ``list[SessionCapture]``** (functional core, decision
-D1): the caller plays the batch once via ``session.env.run_sessions`` and scores every rung of the
+All are **pure functions over an already-played ``list[SessionCapture]``** (functional core,
+effects at the shell): the caller plays the batch once via ``session.env.run_sessions`` and scores every rung of the
 D17 ladder on the same captures. The unit of replication is the **session** (independent: fresh shoe,
 reset bankroll), so confidence intervals aggregate over sessions, never over the (correlated) hands
 within a session — that would be pseudo-replication and an overconfident CI. Rates near 0 (ruin in

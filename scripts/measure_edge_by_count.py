@@ -1,11 +1,11 @@
-"""High-n edge-by-count measurement — produces the canonical committed reference (B2a/B2c).
+"""High-n edge-by-count measurement — produces the canonical committed reference (DESIGN D17).
 
 Fans the flat-bet basic-strategy edge-by-count measurement (``session.references``) across CPU cores
 and merges the per-worker Welford partials losslessly (Chan's parallel variance, ``CountAccumulator.
 merge``). The single-stream ``edge_by_count`` is too noisy in the extreme buckets to anchor the bet
 spread; this drives ~20M hands to tighten the mid-curve and give every bucket a CI.
 
-**Reproducibility-model change (vs B1's single stream).** ``run_sessions`` seeds the global RNG once
+**Reproducibility-model change (vs the single-stream ``edge_by_count``).** ``run_sessions`` seeds the global RNG once
 per call, so one process = one stream. Here each worker is a *separate process* seeded ``base_seed +
 worker_id`` → ``n_workers`` independent streams, merged. The result is regenerable from
 ``(base_seed, n_workers, hands_per_worker, max_hands_per_session, sim-config)`` — all recorded in the
@@ -73,7 +73,7 @@ def _log(line: str) -> None:
 def _write_reference(record: dict, path) -> None:
     """Write the canonical edge-by-count reference to ``path``, stamping provenance (run_id /
     timestamp / git_hash) as ``save_run`` does — but to a **stable committed file**, regenerated in
-    place (overwrite), with git as the safety net. The reference is data the package ships (B2c, D17),
+    place (overwrite), with git as the safety net. The reference is data the package ships (DESIGN D17),
     not a never-overwrite ``runs/`` artifact, so the bet baseline and the figure read one source."""
     now = datetime.now()
     full = {

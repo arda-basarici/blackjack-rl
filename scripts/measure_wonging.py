@@ -1,4 +1,4 @@
-"""Wonging experiment — the cost of the table minimum (DESIGN D17, build stage B2c sidebar).
+"""Wonging experiment — the cost of the table minimum (DESIGN D17).
 
 Full-Kelly's net loss at modest bankrolls (the bet-ladder result) is driven by the **mandatory table
 minimum**: you must bet 1u even on the frequent non-positive-count hands (−EV), and that tax drags

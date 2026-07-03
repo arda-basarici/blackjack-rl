@@ -1,4 +1,4 @@
-"""Figure for the bankroll sweep (DESIGN D17, build stage B2c sidebar).
+"""Figure for the bankroll sweep (DESIGN D17).
 
 Growth/hand vs starting bankroll for continuous full-Kelly under both table rules — the forced curve
 climbing toward the flat wong line as the table-minimum tax (~1/bankroll) fades. Derived view, written

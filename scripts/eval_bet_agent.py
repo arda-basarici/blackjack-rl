@@ -1,4 +1,4 @@
-"""Four-axis evaluation of the learned ``BetAgent`` vs the analytic baselines (B2d-3 deliverable).
+"""Four-axis evaluation of the learned ``BetAgent`` vs the analytic baselines (DESIGN D17).
 
 Loads a trained agent (``load_bet_agent``) and scores it on the full ``metrics`` suite — never collapsed
 — against discrete-``KellyBet`` and ``FlatBet``, in **both** regimes, on identical terms via
