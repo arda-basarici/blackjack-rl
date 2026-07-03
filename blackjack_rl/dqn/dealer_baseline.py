@@ -1,5 +1,5 @@
 """Dealer-outcome control variates for the reward — strip the dealer's shared variance out of the
-training signal so the high-variance actions (double) settle (CONCEPTS §26 / §27 family).
+training signal so the high-variance actions (double) settle.
 
 The terminal reward's swing is mostly the *dealer's* outcome, which is shared across hit/stand/double
 and so is noise w.r.t. *your* decision. We subtract a mean-zero, action-independent baseline `b` from

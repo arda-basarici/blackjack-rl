@@ -70,7 +70,7 @@ class KellyBet:
       the finite menu.
 
     ``kelly_fraction`` (default 1.0 = full Kelly) scales the bet: ``c<1`` is fractional Kelly (less
-    growth, much less volatility — CONCEPTS §30); ``c>1`` is deliberate over-betting (for the
+    growth, much less volatility); ``c>1`` is deliberate over-betting (for the
     ruin-config experiments). A ``BetPolicy`` (env.py): the env clamps the returned wager to the spread
     and the bankroll, so this need not.
     """
@@ -119,7 +119,7 @@ def encode_bet_state(
     bankroll_feature: str = "raw",
 ) -> list[float]:
     """The bet model's state features — the single, isolated encoder (the seam a future learned-count
-    agent swaps, CONCEPTS/DESIGN). Always ``true_count / TC_SCALE`` (the edge signal — the count already
+    agent would swap; that stretch is parked in DESIGN's scope-cut). Always ``true_count / TC_SCALE`` (the edge signal — the count already
     folds in decks-remaining) and ``decks_remaining / num_decks`` (the **remaining-shoe fraction** in
     (0, 1]: scale-free, shoe-size-invariant). ``bankroll_feature`` selects the third — the **encoding
     ablation** for the wealth-vs-edge question (see :data:`BANKROLL_FEATURES`):
@@ -248,7 +248,7 @@ def session_to_transitions(
     ``dqn.deep_q.hand_to_transitions``.
 
     One transition per ``HandRecord`` (unlike the play side, every hand carries a real reward — the bet
-    pays off the same hand it is placed; CONCEPTS §31): state = the pre-deal (count, depth, bankroll)
+    pays off the same hand it is placed): state = the pre-deal (count, depth, bankroll)
     run through ``encode``; action = the recorded ``bet_level`` (the index the agent *chose*, exact even
     where the env clamped the wager — decision 1a); reward = the log-increment, with a total wipeout's
     ``-inf`` clipped to the finite ``ruin_reward`` (the primary ruin signal is structural — the session

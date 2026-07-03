@@ -3,7 +3,7 @@
 A schedule maps an episode index (0 .. num_episodes-1) to a value. Originally for *exploration*
 (epsilon: explore hard early to sample rare actions, anneal toward ~0 late), the same machinery now
 also drives the DQN *learning rate* (a decaying step size lets the value estimate converge to a
-point, mimicking the tabular agent's ``1/n`` step — see CONCEPTS §26). All decay schedules reach
+point, mimicking the tabular agent's ``1/n`` step — Robbins–Monro). All decay schedules reach
 ``end`` exactly at the final episode. See A8.
 """
 from __future__ import annotations

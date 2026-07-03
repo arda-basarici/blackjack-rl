@@ -233,7 +233,7 @@ Three things the trace shows:
 
 ## Test 8 — Stability levers @ γ=0 (the limit-cycle hypothesis)
 
-Tested the "boom-and-bust limit-cycle" fixes (REPORT_NOTES). **Two no-ops, one decisive-negative.**
+Tested the "boom-and-bust limit-cycle" fixes. **Two no-ops, one decisive-negative.**
 
 - **double-DQN & Polyak (`b2048_dbl`, `b2048_polyak`) — NO-OP at γ=0** (see ⚠ in *Open items*). Bit-identical
   to baseline and to each other — they only touch the *bootstrap*, which γ=0 zeroes. Killed unfinished.
@@ -575,7 +575,7 @@ artifacts); each run id carries its own provenance (timestamp + git hash).
     The near-Kelly ramps the orbit visits are **over-betting artifacts** (dd 14–18% vs flat 0.55%, worse
     growth) — *not* a better policy the objective fails to reward. H3 answered: noise excursions. Only
     structured Kelly beats flat. (Mechanism: **wealth-scaling without edge-gating** — the net keyed on
-    bankroll, not count; the PCA/t-SNE embedding shows clusters split by bankroll — REPORT_NOTES_B.)
+    bankroll, not count; the PCA/t-SNE embedding shows clusters split by bankroll.)
 13. **[REVISES the single-seed double reads] Multi-seed hardening (Test 13).** "double-ON is safe" was
     seed-luck — across seeds double-ON [final] dd = 2.60 ± 3.05% (variable, some over-bet) vs double-OFF
     1.39 ± 0.44% (consistent). γ characterized: γ0.95/0.99 stable+safe, γ0.9 too low. **The whole thesis

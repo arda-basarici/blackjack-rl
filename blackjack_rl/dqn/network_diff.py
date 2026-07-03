@@ -8,8 +8,8 @@ forward pass per cell) for its Q-values, then reuse ``diff_policy`` unchanged â€
 
 No visit counts, on purpose: the network has an answer at *every* cell by generalization, so there
 is no per-cell coverage to measure â€” the ``under_visited`` category does not apply, and the diff is
-run with ``min_visits=0``. This is the generalization-vs-coverage point (CONCEPTS.md section 18)
-made concrete: a table only has entries where it was visited; the net fills the whole grid.
+run with ``min_visits=0``. This is the generalization-vs-coverage point made concrete: a table
+only has entries where it was visited; the net fills the whole grid.
 
 Split-aware: when the agent plays splits (``agent.with_splits``), the 10-pair column is enumerated
 and scored against basic strategy too (each pair is its own ``can_split=True`` cell; A11).

@@ -1,4 +1,4 @@
-"""Experience replay — the first stabilizer of deep Q-learning (CONCEPTS.md section 17).
+"""Experience replay — the first stabilizer of deep Q-learning.
 
 Training on transitions in the order they occur feeds the network highly correlated samples
 (consecutive decisions in one hand) and lets it forget older experience. A replay buffer breaks

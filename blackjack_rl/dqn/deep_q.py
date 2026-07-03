@@ -1,4 +1,4 @@
-"""Deep Q-learning trainer (CONCEPTS.md section 17).
+"""Deep Q-learning trainer.
 
 This unit ships the second stabilizer — the **target network** — and its helpers. The TD training
 loop (capture episodes, reconstruct transitions, sample minibatches, optimize) is the next unit
@@ -84,7 +84,7 @@ def hand_to_transitions(
 
     ``reward_baseline`` ("none"|"bust"|"stand") subtracts a mean-zero, action-independent dealer
     control variate from the *terminal* reward — strips the dealer's shared variance so high-variance
-    actions settle, without changing EV or the policy (CONCEPTS §27; see evaluation/dealer_baseline).
+    actions settle, without changing EV or the policy (see evaluation/dealer_baseline).
 
     NO-SPLIT ONLY: assumes the steps form one chain. Splitting (a tree of sub-hands) is a later
     extension that must decide how the ``split`` action's two successors form its target.
@@ -270,7 +270,7 @@ def train_dqn(
     )
     # Learning-rate schedule: constant by default (original behavior). A decaying step lets the
     # estimate converge to a point instead of swinging in a fixed band under constant gain — the
-    # tabular agent's 1/n step, ported to the net (CONCEPTS §26). lr is the start, lr_end the end.
+    # tabular agent's 1/n step, ported to the net (Robbins–Monro). lr is the start, lr_end the end.
     lr_at = make_schedule(
         config.lr_schedule,
         constant=config.lr,

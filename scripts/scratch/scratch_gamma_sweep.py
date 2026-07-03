@@ -1,6 +1,6 @@
-"""Gamma-sweep diagnostic (B2d-3 scratch): does shortening the horizon recover the Kelly ramp?
+"""Gamma-sweep diagnostic (scratch): does shortening the horizon recover the Kelly ramp?
 
-Locked-baseline OFAT (CONCEPTS §32): growth_config with identical net / replay / epsilon / lr across
+Locked-baseline OFAT (one factor at a time, everything else pinned): growth_config with identical net / replay / epsilon / lr across
 runs; the ONLY variable is the TD discount ``gamma`` in {0.0, 0.9, 0.99, 1.0}.
 
 Hypothesis under test (telescoping variance): with gamma=1 the per-hand return telescopes to

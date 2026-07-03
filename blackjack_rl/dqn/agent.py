@@ -5,7 +5,7 @@ Where ``TabularAgent`` (agents/tabular.py) stores Q(state, action) in a dict, th
 The two are deliberately interchangeable behind the Strategy contract (DESIGN D2) — ``decide``
 (epsilon-greedy behaviour) and ``greedy_action`` (argmax target) share signatures — so the
 existing evaluator, policy-diff, and env harness drive either one unchanged. See DESIGN D4 (the
-net as a deliberate literacy experiment) and CONCEPTS.md sections 17-18.
+net as a deliberate literacy experiment).
 
 This module is the *function approximator* only: the network, the scalar feature encoding, and
 action selection with legal-action masking. Training (replay buffer, target network, the TD
@@ -72,7 +72,7 @@ def encode_features(
     state: StateLike, with_splits: bool = False, encoding: str = "scalar"
 ) -> list[float]:
     """State features for the network — the *same* information either way, but a different prior
-    about distance (CONCEPTS.md sections 18-19, 21):
+    about distance:
 
     - **"scalar"**: player_value / soft / dealer_upcard as normalized numbers. A *smoothness prior*
       — nearby totals must behave similarly. Generalizes, but smears the sharp soft-hand / upcard

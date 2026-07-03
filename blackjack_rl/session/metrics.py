@@ -9,8 +9,7 @@ effects at the shell): the caller plays the batch once via ``session.env.run_ses
 D17 ladder on the same captures. The unit of replication is the **session** (independent: fresh shoe,
 reset bankroll), so confidence intervals aggregate over sessions, never over the (correlated) hands
 within a session — that would be pseudo-replication and an overconfident CI. Rates near 0 (ruin in
-the growth regime) use the **Wilson** interval, which Wald collapses on. Full derivations:
-WHITEBOARD.md 2026-06-29.
+the growth regime) use the **Wilson** interval, which Wald collapses on.
 """
 from __future__ import annotations
 
@@ -64,7 +63,8 @@ def wilson_interval(k: int, n: int, z: float = Z95) -> Proportion:
     """Wilson score 95% CI for a proportion of ``k`` successes in ``n`` trials (DESIGN D17).
 
     Stays inside [0, 1] and keeps a positive width at ``k=0`` or ``k=n``, where the Wald interval
-    collapses to zero — the right tool for rare-event rates like ruin. Formula: WHITEBOARD 2026-06-29.
+    collapses to zero — the right tool for rare-event rates like ruin. Formula: Wilson (1927)
+    score interval.
     """
     if n <= 0:
         raise ValueError(f"wilson_interval needs n >= 1, got {n}")
@@ -137,7 +137,7 @@ def session_growth_rate(capture: SessionCapture) -> float:
 def session_max_drawdown(capture: SessionCapture) -> float:
     """One session's drawdown vs its **initial** bankroll: ``1 - min(W_t) / W_0`` in [0, 1] (hard ruin
     is the limiting case ``1``). Initial-anchored, not peak-to-trough, because the risk here is
-    survival — distance toward the barrier — see WHITEBOARD 2026-06-29."""
+    survival — distance toward the barrier."""
     w0 = capture.starting_bankroll
     lo = min([w0, *(h.bankroll_after for h in capture.hands)])
     return max(0.0, 1.0 - lo / w0)

@@ -8,7 +8,7 @@
   "//1": "scripts/ legitimately use loose values — test doubles (a minimal _ConstQ for QNetwork,",
   "//2": "int for bool kwargs) and one-off report scripts gluing untyped libs (reportlab, matplotlib,",
   "//3": "pandas). We silence ONLY the strictness rules those trip, per-tree, so import-resolution,",
-  "//4": "undefined-name, and (in tests) attribute-typo checks stay live. See SESSION_LOG 2026-06-26.",
+  "//4": "undefined-name, and (in tests) attribute-typo checks stay live.",
   "executionEnvironments": [
     {
       "root": "tests",

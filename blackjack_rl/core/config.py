@@ -35,7 +35,7 @@ class ExperimentConfig:
     seed             : seed for the global RNG (Phase 2 convention: 42).
 
     We train with exploration but EVALUATE greedily, so exploration only shapes what gets
-    sampled, never the reported policy. See CONCEPTS.md #15.
+    sampled, never the reported policy.
     """
 
     num_episodes: int
@@ -80,7 +80,7 @@ class DQNConfig:
     lr_schedule       : "constant" | "linear" | "exponential" | "harmonic" (reuses schedules.py).
                         A decaying step size lets the estimate converge to a point instead of
                         oscillating in a fixed band under constant gain — the tabular agent's ``1/n``
-                        step, ported to the net (CONCEPTS §26). "constant" = the original behavior.
+                        step, ported to the net (Robbins–Monro). "constant" = the original behavior.
     lr_end            : end learning rate for a decaying schedule (reached at the final episode;
                         must be > 0 for harmonic/exponential). Ignored when lr_schedule="constant".
     gamma             : TD discount (1.0 for Problem A — reward is terminal-only).
@@ -98,7 +98,7 @@ class DQNConfig:
     double_dqn        : Double-DQN targets (select next action with the online net, evaluate with
                         the target net) to curb the max-overestimation bias. Off = vanilla DQN.
     encoding          : input encoding — "scalar" (smooth/ordered prior) or "onehot" (total + upcard
-                        as categories, sharp where blackjack is sharp). See CONCEPTS §21.
+                        as categories, sharp where blackjack is sharp).
     exploring_starts  : train with forced (state, action) starts (uniform coverage, greedy follow,
                         epsilon ignored) instead of natural epsilon-greedy play. The DQN capstone.
     log_q_grid        : at each checkpoint, log Q for every action at every cell (all 240) so we
@@ -128,7 +128,7 @@ class DQNConfig:
                         "none" (default) | "bust" (coarse, bust/no-bust) | "stand" (full dealer-total
                         via a stand reference). Mean-zero + action-independent, so EV and policy are
                         unchanged; it strips the dealer's shared variance so high-variance actions
-                        settle (CONCEPTS §27; evaluation/dealer_baseline).
+                        settle (see evaluation/dealer_baseline).
     baseline_c        : coefficient for the "bust" baseline (ignored otherwise). 1.0 default.
     """
 

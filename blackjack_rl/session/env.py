@@ -14,7 +14,7 @@ hands): given a play ``Strategy`` and a ``BetPolicy`` it plays a whole session a
 every rung of the ladder (D17) is measured on identical terms.
 
 Reproducibility: the engine shuffles with Python's global ``random``; seed ONCE before a batch
-(``run_sessions`` does this), never per hand. See CONCEPTS.md #14.
+(``run_sessions`` does this), never per hand.
 """
 from __future__ import annotations
 
@@ -300,8 +300,8 @@ def run_sessions(
     n: int,
     sim_config: SimulatorConfig | None = None,
 ) -> Iterator[SessionCapture]:
-    """Yield ``n`` reproducible sessions: seed the global RNG **once** from ``config.seed`` (CONCEPTS
-    #14), then play ``n`` independent sessions (each a fresh shuffled shoe + full bankroll) off the
+    """Yield ``n`` reproducible sessions: seed the global RNG **once** from ``config.seed``,
+    then play ``n`` independent sessions (each a fresh shuffled shoe + full bankroll) off the
     one stream — varied but reproducible as a batch. The B-side analog of ``core.env.rollout_many``.
     """
     random.seed(config.seed)

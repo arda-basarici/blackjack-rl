@@ -8,7 +8,7 @@ sub-hand's decisions carry that sub-hand's payout and the split decision carries
 So credit assignment follows the tree correctly, with no extra bookkeeping here.
 
 Reproducibility: the engine shuffles with Python's global `random`; seed it ONCE before rolling
-out (never per hand). See CONCEPTS.md #14.
+out (never per hand).
 """
 from dataclasses import dataclass
 from typing import Iterator

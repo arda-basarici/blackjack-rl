@@ -2,7 +2,8 @@
 
 How the project is built and why that structure — the module graph, the seams, and the
 structural decisions, kept as a clean snapshot of the code as it stands. Edited in place; the
-build chronology lives in the session log. What was decided and why → [DESIGN.md](DESIGN.md);
+build chronology lives in the experiment ledger ([B2d_EXPERIMENTS.md](B2d_EXPERIMENTS.md)) and
+the reports. What was decided and why → [DESIGN.md](DESIGN.md);
 the front door → [README.md](README.md).
 
 Structural decisions are anchored **A1, A2, …** where they are made below. (The prefix is

@@ -2,8 +2,8 @@
 
 What was built and why — the decisions and their reasoning, kept as a clean snapshot of the
 design as it stands. Edited in place, not appended to; the chronological journey lives in the
-session log and the three reports. How the code is structured → [ARCHITECTURE.md](ARCHITECTURE.md);
-the front door → [README.md](README.md).
+three reports and the experiment ledger ([B2d_EXPERIMENTS.md](B2d_EXPERIMENTS.md)). How the code
+is structured → [ARCHITECTURE.md](ARCHITECTURE.md); the front door → [README.md](README.md).
 
 *Snapshot of the completed project · last updated 2026-07-03.*
 

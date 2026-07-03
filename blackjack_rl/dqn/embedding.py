@@ -6,7 +6,7 @@ for every canonical decision cell — the learned representation the Q head sees
 metadata (chosen action, basic-strategy action, diff category, decision margin) for coloring a
 PCA / t-SNE scatter.
 
-The point (CONCEPTS §18, §26): the input space is already 2-3 interpretable dimensions (the
+The point: the input space is already 2-3 interpretable dimensions (the
 basic-strategy heatmap plots it exactly), so this is *not* about re-deriving that. It visualizes the
 *learned feature* geometry — where the shared-weight representation separates the actions and, more
 tellingly, where the genuine errors live (the confusable region = the function-approximation floor

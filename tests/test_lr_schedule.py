@@ -1,5 +1,5 @@
 """Tests for the learning-rate schedule: the generic schedule reused for the lr, config validation,
-and that train_dqn actually anneals the optimizer step over training (CONCEPTS §26)."""
+and that train_dqn actually anneals the optimizer step over training."""
 from __future__ import annotations
 
 from blackjack_rl.core.config import DQNConfig

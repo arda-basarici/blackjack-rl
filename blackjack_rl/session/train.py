@@ -42,7 +42,7 @@ class BetTrainConfig:
     n_sessions        : number of training sessions (the outer-loop length).
     epsilon[_*]       : exploration rate over the bet menu / decaying schedule (reuses schedules.py).
     hidden            : QNetwork hidden-layer sizes.
-    lr / lr_schedule / lr_end : Adam step and its (optional) decay (CONCEPTS §26).
+    lr / lr_schedule / lr_end : Adam step and its (optional) decay.
     gamma             : TD discount. **Default 0.0 (myopic).** Kelly is the per-hand log-optimum, so in
                         the growth regime (ruin dormant) the bandit objective learns the count->bet ramp
                         at minimum variance; gamma=1 telescopes the ~1000-hand return and DIVERGES (measured
