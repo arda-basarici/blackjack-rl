@@ -28,3 +28,7 @@ CHAPTERS_REVIEW.md
 
 # scratch whiteboard for live discussion/derivations — promote keepers, then clear/delete
 WHITEBOARD.md
+
+# inherited from the monorepo root .gitignore at the repo split
+*.egg-info/
+.ipynb_checkpoints/
