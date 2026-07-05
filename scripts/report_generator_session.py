@@ -383,7 +383,7 @@ def build_pdf(C: dict[str, str]) -> None:
              Paragraph("A learned DQN bettor vs. the analytic Kelly ladder, measured over sessions on four axes",
                        meta),
              Spacer(1, 2 * mm),
-             Paragraph("Part of AI Journey &mdash; Phase 3: Deep Learning &amp; Reinforcement Learning", meta),
+             Paragraph("Part of AI Journey &mdash; Deep Learning &amp; Reinforcement Learning", meta),
              Spacer(1, 10 * mm),
              Paragraph("arda-basarici.github.io/blackjack-betting",
                        ParagraphStyle("L", fontSize=10.5, textColor=HexColor("#64B5F6"), alignment=TA_CENTER, fontName="Helvetica"))]

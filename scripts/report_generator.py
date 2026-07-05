@@ -71,6 +71,9 @@ def pick(**crit):
     best = None
     for p in sorted(glob.glob(f"{RUNS_DIR}/*/record.json")):
         rec = json.load(open(p)); cfg = rec["config"]
+        # This report reconstructs tabular agents; later DQN/bet-agent runs share config
+        # keys (epsilon, schedules) but carry no Q-table — they are not candidates.
+        if "qtable" not in rec: continue
         if method != "__any__" and rec.get("method") != method: continue
         if all(norm(cfg, k) == v for k, v in crit.items()): best = p
     if best is None:
@@ -391,9 +394,9 @@ def build_pdf(C, M):
            Paragraph(f"Tabular Monte Carlo control &bull; {M['train_eps']/1e6:.0f}M training hands "
                      "&bull; audited cell-by-cell against basic strategy", meta),
            Spacer(1,2*mm),
-           Paragraph("Part of AI Journey &mdash; Phase 3: Deep Learning &amp; RL", meta),
+           Paragraph("Part of AI Journey &mdash; Deep Learning &amp; RL", meta),
            Spacer(1,12*mm),
-           Paragraph("github.com/arda-basarici/ai-journey",
+           Paragraph("github.com/arda-basarici/blackjack-rl",
                      ParagraphStyle("L", fontSize=10.5, textColor=HexColor("#64B5F6"), alignment=TA_CENTER, fontName="Helvetica"))]
     story.append(panel(cover, height=120*mm)); story.append(PageBreak())
 
@@ -620,7 +623,7 @@ def build_pdf(C, M):
                        ParagraphStyle("CT", fontSize=16, textColor=white, alignment=TA_CENTER, fontName="Helvetica-Bold", spaceAfter=14, leading=20)),
              Paragraph("A structured path from Python foundations to AI engineering.",
                        ParagraphStyle("CB", fontSize=10, textColor=HexColor("#BBDEFB"), alignment=TA_CENTER, fontName="Helvetica", spaceAfter=14, leading=15)),
-             Paragraph("github.com/arda-basarici/ai-journey",
+             Paragraph("arda-basarici.github.io",
                        ParagraphStyle("CL", fontSize=11, textColor=HexColor("#64B5F6"), alignment=TA_CENTER, fontName="Helvetica-Bold", leading=14))]
     story.append(panel(closing, height=165, pad=24))
     doc.build(story)

@@ -568,9 +568,9 @@ def build_pdf(C):
              Spacer(1, 8 * mm),
              Paragraph("A DQN vs. lookup-table study on blackjack, audited cell-by-cell against basic strategy", meta),
              Spacer(1, 2 * mm),
-             Paragraph("Part of AI Journey &mdash; Phase 3: Deep Learning &amp; Reinforcement Learning", meta),
+             Paragraph("Part of AI Journey &mdash; Deep Learning &amp; Reinforcement Learning", meta),
              Spacer(1, 10 * mm),
-             Paragraph("github.com/arda-basarici/ai-journey",
+             Paragraph("github.com/arda-basarici/blackjack-rl",
                        ParagraphStyle("L", fontSize=10.5, textColor=HexColor("#64B5F6"), alignment=TA_CENTER, fontName="Helvetica"))]
     story.append(panel(cover, height=118 * mm)); story.append(PageBreak())
 
@@ -950,7 +950,7 @@ def build_pdf(C):
                          ParagraphStyle("CT", fontSize=16, textColor=white, alignment=TA_CENTER, fontName="Helvetica-Bold", spaceAfter=14, leading=20)),
                Paragraph("A structured path from Python foundations to AI engineering.",
                          ParagraphStyle("CB", fontSize=10, textColor=HexColor("#BBDEFB"), alignment=TA_CENTER, fontName="Helvetica", spaceAfter=14, leading=15)),
-               Paragraph("github.com/arda-basarici/ai-journey",
+               Paragraph("arda-basarici.github.io",
                          ParagraphStyle("CL", fontSize=11, textColor=HexColor("#64B5F6"), alignment=TA_CENTER, fontName="Helvetica-Bold", leading=14))]
     story.append(panel(closing, height=150, pad=24))
 
