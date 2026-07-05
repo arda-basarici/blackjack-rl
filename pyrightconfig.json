@@ -2,7 +2,7 @@
   "venvPath": ".",
   "venv": ".venv",
   "pythonVersion": "3.13",
-  "extraPaths": [".", "../../phase2-data/blackjack-sim"],
+  "extraPaths": [".", "../blackjack-sim"],
 
   "//": "Library code (blackjack_rl/) is type-checked at full standard strictness. tests/ and",
   "//1": "scripts/ legitimately use loose values — test doubles (a minimal _ConstQ for QNetwork,",
@@ -12,14 +12,14 @@
   "executionEnvironments": [
     {
       "root": "tests",
-      "extraPaths": [".", "../../phase2-data/blackjack-sim"],
+      "extraPaths": [".", "../blackjack-sim"],
       "reportArgumentType": "none",
       "reportCallIssue": "none",
       "reportReturnType": "none"
     },
     {
       "root": "scripts",
-      "extraPaths": [".", "../../phase2-data/blackjack-sim"],
+      "extraPaths": [".", "../blackjack-sim"],
       "reportArgumentType": "none",
       "reportCallIssue": "none",
       "reportReturnType": "none",

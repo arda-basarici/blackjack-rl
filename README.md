@@ -48,13 +48,15 @@ construction.
 
 ## Run it
 
-Requires the Phase-2 engine checked out as a sibling project (`blackjack-sim`).
+The Phase-2 engine (`blackjack-sim`) installs automatically from its GitHub repo; a
+sibling checkout is only needed to develop against a local engine.
 
 ```powershell
 py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -e ..\..\phase2-data\blackjack-sim   # the validated engine + BasicStrategy
-pip install -e ".[dev]"                          # this package (pyproject.toml is the single dependency source)
+pip install -e ".[dev]"                          # this package + deps, engine included (pyproject.toml is the single dependency source)
+# optional — develop against a local engine checkout (overrides the git pin; run last):
+# pip install -e ..\blackjack-sim
 
 python -m pytest tests -q                        # the test suite
 ```

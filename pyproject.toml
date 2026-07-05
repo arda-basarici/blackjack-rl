@@ -11,6 +11,10 @@ dependencies = [
     "numpy",
     # Added at Stage 5 (the DQN). Needs a cp313 wheel: torch >= 2.5 ships one.
     "torch>=2.5",
+    # The Phase 2 engine, now a standalone repo — pip resolves it from GitHub. To develop
+    # against a local checkout instead, `pip install -e ../blackjack-sim` AFTER installing
+    # this package (pip re-resolves this git pin on every install, so editable-last wins).
+    "blackjack-sim @ git+https://github.com/arda-basarici/blackjack-sim",
 ]
 
 [project.optional-dependencies]
@@ -20,10 +24,6 @@ analysis = ["pandas", "matplotlib", "ipykernel", "scikit-learn"]
 report = ["seaborn", "reportlab", "nbconvert"]
 # Auto-generated API reference (scripts/make_docs.py). pdoc imports the package, never hand-written.
 docs = ["pdoc"]
-
-# The Phase 2 engine is consumed via an editable install, not a declared dependency:
-#   pip install -e ../../phase2-data/blackjack-sim
-# (path deps are awkward with plain pip; see README + DESIGN.md D10).
 
 [tool.setuptools.packages.find]
 include = ["blackjack_rl*"]
