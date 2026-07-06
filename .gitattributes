@@ -1,0 +1,4 @@
+# Language stats (GitHub Linguist): the source is the Python package.
+# Notebooks are analysis documents; analysis/html/ is nbconvert-generated from them.
+*.ipynb linguist-documentation
+analysis/html/* linguist-generated
