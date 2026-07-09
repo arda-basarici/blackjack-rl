@@ -96,3 +96,8 @@ python scripts\make_docs.py                      # render the API reference (pdo
 
 [DESIGN.md](DESIGN.md) — the decisions and why · [ARCHITECTURE.md](ARCHITECTURE.md) — the
 structure and why that shape · the three reports linked in the table above.
+
+## License
+
+Code is released under the [MIT License](LICENSE). The three report PDFs are
+© 2026 Arda Başarıcı, all rights reserved — included for reading, not licensed for reuse.
